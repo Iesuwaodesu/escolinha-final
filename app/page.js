@@ -71,7 +71,7 @@ export default function LoginPage() {
         <div className="flex border-b bg-gray-50">
           <button onClick={() => setModo('login')} className={`flex-1 p-3 text-xs font-bold uppercase tracking-wider ${modo === 'login' ? 'bg-white text-green-700 border-t-2 border-green-600' : 'text-gray-400 hover:text-gray-600'}`}>Entrar</button>
           <button onClick={() => setModo('cadastro_aluno')} className={`flex-1 p-3 text-xs font-bold uppercase tracking-wider ${modo === 'cadastro_aluno' ? 'bg-white text-green-700 border-t-2 border-green-600' : 'text-gray-400 hover:text-gray-600'}`}>Novo Aluno</button>
-          <button onClick={() => setModo('cadastro_admin')} className={`flex-1 p-3 text-xs font-bold uppercase tracking-wider ${modo === 'cadastro_admin' ? 'bg-white text-black border-t-2 border-gray-800' : 'text-gray-400 hover:text-gray-600'}`}>Staff</button>
+          {/* <button onClick={() => setModo('cadastro_admin')} className={`flex-1 p-3 text-xs font-bold uppercase tracking-wider ${modo === 'cadastro_admin' ? 'bg-white text-black border-t-2 border-gray-800' : 'text-gray-400 hover:text-gray-600'}`}>Staff</button> */}
         </div>
 
         <div className="p-8">
