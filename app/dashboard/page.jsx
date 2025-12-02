@@ -12,7 +12,8 @@ export default function Dashboard() {
   const router = useRouter()
   const [loading, setLoading] = useState(true)
   
-  // Estados para Pais
+  // Estados
+  const [user, setUser] = useState(null)
   const [alunos, setAlunos] = useState([])
   const [alunoSelecionado, setAlunoSelecionado] = useState(null)
   const [mensalidades, setMensalidades] = useState([])
@@ -24,42 +25,33 @@ export default function Dashboard() {
     async function init() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return router.push('/')
+      setUser(user) // Guardamos o usuário para mostrar o email
 
-      // 1. VERIFICAÇÃO DE ADMIN (O PULO DO GATO)
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('is_admin')
-        .eq('id', user.id)
-        .single()
-
+      // Verifica Admin para redirecionar
+      const { data: profile } = await supabase.from('profiles').select('is_admin').eq('id', user.id).single()
       if (profile?.is_admin === true) {
-        // SE FOR ADMIN, MANDA DIRETO PRO PAINEL ADMIN
         router.replace('/admin')
         return
       }
 
-      // SE NÃO FOR ADMIN, CARREGA DADOS DE PAI
       carregarDadosPai(user.id)
     }
     init()
   }, [])
 
   async function carregarDadosPai(userId) {
-    // Busca Alunos
     const { data: dataAlunos } = await supabase.from('alunos').select('*').eq('responsavel_id', userId)
     if (dataAlunos?.length > 0) {
       setAlunos(dataAlunos)
       setAlunoSelecionado(dataAlunos[0])
     }
     
-    // Busca Eventos
     const { data: evs } = await supabase.from('eventos').select('*').gte('data_hora', new Date().toISOString()).order('data_hora')
     setEventosDisponiveis(evs || [])
     
     setLoading(false)
   }
 
-  // Monitora mudança de aluno selecionado para carregar financeiro/inscrições
   useEffect(() => {
     if (!alunoSelecionado) return
     
@@ -92,18 +84,28 @@ export default function Dashboard() {
     if (!error) window.location.reload()
   }
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center font-bold text-gray-500">Carregando Sistema...</div>
+  if (loading) return <div className="min-h-screen flex items-center justify-center font-bold text-gray-500">Carregando...</div>
 
-  // --- RENDERIZAÇÃO DO PAINEL DOS PAIS ---
   return (
     <div className="min-h-screen bg-gray-50 p-4 pb-20 font-sans">
       <div className="max-w-5xl mx-auto">
-        <div className="flex justify-between items-center mb-6 bg-white p-4 rounded-xl shadow-sm">
-          <div><h1 className="text-xl font-bold text-gray-800">Painel do Responsável</h1><p className="text-xs text-gray-500">Escolinha SDC</p></div>
-          <button onClick={() => {supabase.auth.signOut(); router.push('/')}} className="text-red-600 px-2 text-xs hover:underline">Sair</button>
+        
+        {/* HEADER COM EMAIL VISÍVEL */}
+        <div className="flex justify-between items-start mb-6 bg-white p-4 rounded-xl shadow-sm">
+          <div>
+            <h1 className="text-xl font-bold text-gray-800">Painel do Responsável</h1>
+            <p className="text-xs text-gray-400">Escolinha SDC</p>
+            {/* AQUI ESTÁ A INFORMAÇÃO QUE VOCÊ PEDIU */}
+            <p className="text-xs text-gray-500 mt-2 bg-gray-100 px-2 py-1 rounded inline-block">
+              Logado como: <strong>{user?.email}</strong>
+            </p>
+          </div>
+          <button onClick={() => {supabase.auth.signOut(); router.push('/')}} className="text-red-600 px-3 py-1 text-sm font-bold border border-red-100 rounded hover:bg-red-50">
+            SAIR
+          </button>
         </div>
 
-        {alunos.length === 0 ? <div className="p-4 text-gray-600">Nenhum aluno encontrado. Se você acabou de se cadastrar, aguarde a confirmação ou entre em contato.</div> : (
+        {alunos.length === 0 ? <div className="p-4 text-gray-600">Nenhum aluno encontrado. Se acabou de cadastrar, aguarde ou fale com o suporte.</div> : (
           <>
             <div className="mb-6 flex items-center gap-3">
               {alunoSelecionado?.foto_url && <img src={alunoSelecionado.foto_url} className="w-12 h-12 rounded-full object-cover border-2 border-green-500" />}
@@ -153,7 +155,7 @@ export default function Dashboard() {
           </>
         )}
       </div>
-      {/* Modal igual ao anterior, omitido por brevidade mas deve estar aqui */}
+      
       {modalEvento && (
         <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 relative">
