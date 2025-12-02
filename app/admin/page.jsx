@@ -11,298 +11,166 @@ const supabase = createClient(
 export default function AdminPanel() {
   const router = useRouter()
   const [loading, setLoading] = useState(true)
-  const [aba, setAba] = useState('financeiro') 
+  const [aba, setAba] = useState('eventos') 
   
   // Dados
   const [mensalidades, setMensalidades] = useState([])
-  const [eventos, setEventos] = useState([])
+  const [eventos, setEventos] = useState([]) // Agora virá com contagem
   const [alunos, setAlunos] = useState([])
-  
-  // Estados para Detalhes e Cadastros
-  const [alunoDetalhe, setAlunoDetalhe] = useState(null) // O "Dossiê" do aluno
-  const [novoAluno, setNovoAluno] = useState({ nome: '', data_nascimento: '', posicao: '', endereco: '', email_responsavel: '' })
+  const [novoEvento, setNovoEvento] = useState({ titulo: '', data: '', local: '', descricao: '', valor: '0' })
 
   useEffect(() => {
-    checkAdmin()
+    async function init() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return router.push('/')
+      
+      const { data: profile } = await supabase.from('profiles').select('is_admin').eq('id', user.id).single()
+      if (!profile?.is_admin) return router.push('/dashboard')
+      
+      carregarTudo()
+    }
+    init()
   }, [])
-
-  async function checkAdmin() {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return router.push('/')
-    
-    const { data: profile } = await supabase.from('profiles').select('is_admin').eq('id', user.id).single()
-    if (!profile?.is_admin) return router.push('/dashboard')
-    
-    carregarTudo()
-  }
 
   async function carregarTudo() {
     setLoading(true)
     
-    // 1. Mensalidades com dados do aluno
-    const { data: m } = await supabase
-      .from('mensalidades')
-      .select('*, alunos(nome)')
-      .order('vencimento', { ascending: false })
+    // 1. Eventos com Contagem de Inscritos (Contamos depois no JS para simplificar)
+    const { data: e } = await supabase.from('eventos').select('*, inscricoes(id)').order('data_hora')
+    // Adiciona propriedade "qtd_inscritos"
+    const eventosComContagem = e?.map(ev => ({ ...ev, qtd_inscritos: ev.inscricoes.length }))
+    setEventos(eventosComContagem || [])
+
+    // 2. Mensalidades
+    const { data: m } = await supabase.from('mensalidades').select('*, alunos(nome)').order('vencimento', { ascending: false })
     setMensalidades(m || [])
 
-    // 2. Alunos com dados do Responsável
-    const { data: a } = await supabase
-      .from('alunos')
-      .select('*, profiles!inner(nome_completo, email, telefone)')
-      .order('nome')
+    // 3. Alunos
+    const { data: a } = await supabase.from('alunos').select('*, profiles(nome_completo, email, telefone)').order('nome')
     setAlunos(a || [])
-
-    // 3. Eventos
-    const { data: e } = await supabase.from('eventos').select('*').order('data_hora')
-    setEventos(e || [])
 
     setLoading(false)
   }
 
-  // --- FUNÇÕES AUXILIARES ---
-  function calcularIdade(dataNasc) {
-    if (!dataNasc) return '--'
-    const hoje = new Date()
-    const nasc = new Date(dataNasc)
-    let idade = hoje.getFullYear() - nasc.getFullYear()
-    const m = hoje.getMonth() - nasc.getMonth()
-    if (m < 0 || (m === 0 && hoje.getDate() < nasc.getDate())) idade--
-    return idade
-  }
-
-  function formatarMes(dataString) {
-    // Ex: 2025-12-01 -> Dezembro/2025
-    const data = new Date(dataString)
-    // Ajuste do fuso horário gambiarra simples para não voltar 1 dia
-    const userTimezoneOffset = data.getTimezoneOffset() * 60000;
-    const dataCorrigida = new Date(data.getTime() + userTimezoneOffset);
-    return dataCorrigida.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }).toUpperCase()
-  }
-
-  // --- AÇÕES ---
-  async function cadastrarAlunoAdmin(e) {
+  // --- AÇÕES DE EVENTOS (Que tinham sumido) ---
+  async function criarEvento(e) {
     e.preventDefault()
-    
-    // 1. Achar o pai pelo email
-    const { data: pai, error: erroPai } = await supabase
-      .from('profiles')
-      .select('id')
-      .eq('email', novoAluno.email_responsavel)
-      .single()
-
-    if (erroPai || !pai) {
-      alert('ERRO: E-mail do responsável não encontrado! O pai precisa criar a conta no site primeiro.')
-      return
-    }
-
-    // 2. Criar aluno
-    const { error } = await supabase.from('alunos').insert({
-      responsavel_id: pai.id,
-      nome: novoAluno.nome,
-      data_nascimento: novoAluno.data_nascimento,
-      posicao: novoAluno.posicao,
-      endereco: novoAluno.endereco
+    const { error } = await supabase.from('eventos').insert({
+      titulo: novoEvento.titulo,
+      data_hora: novoEvento.data,
+      local: novoEvento.local,
+      descricao: novoEvento.descricao,
+      valor: novoEvento.valor
     })
-
-    if (error) alert('Erro ao cadastrar: ' + error.message)
+    
+    if (error) alert('Erro: ' + error.message)
     else {
-      alert('Aluno cadastrado com sucesso!')
-      setNovoAluno({ nome: '', data_nascimento: '', posicao: '', endereco: '', email_responsavel: '' })
+      alert('Evento criado com sucesso!')
+      setNovoEvento({ titulo: '', data: '', local: '', descricao: '', valor: '0' })
       carregarTudo()
     }
   }
 
-  async function deletarAluno(id) {
-    if(!confirm('Tem certeza absoluta? Isso apaga histórico financeiro e inscrições deste aluno.')) return;
-    await supabase.from('inscricoes').delete().eq('aluno_id', id)
-    await supabase.from('mensalidades').delete().eq('aluno_id', id)
-    await supabase.from('alunos').delete().eq('id', id)
-    setAlunoDetalhe(null) // Fecha o modal se estiver aberto
+  async function deletarEvento(id) {
+    if(!confirm('Tem certeza? Isso apaga todas as inscrições deste evento.')) return;
+    await supabase.from('inscricoes').delete().eq('evento_id', id)
+    await supabase.from('eventos').delete().eq('id', id)
     carregarTudo()
   }
 
+  // Ações Auxiliares
   async function alternarMensalidade(id, status) {
     const novoStatus = status === 'pago' ? 'pendente' : 'pago'
     await supabase.from('mensalidades').update({ status: novoStatus }).eq('id', id)
-    carregarTudo() // Recarrega para atualizar a lista
-    // Atualiza o detalhe se estiver aberto
-    if (alunoDetalhe) {
-      // Pequeno delay para dar tempo do banco atualizar
-      setTimeout(async () => {
-        const { data: m } = await supabase.from('mensalidades').select('*').eq('aluno_id', alunoDetalhe.id)
-        setAlunoDetalhe(prev => ({ ...prev, mensalidades: m }))
-      }, 500)
-    }
+    carregarTudo()
   }
 
-  // Abre o "Dossiê" do aluno
-  async function abrirDetalhes(aluno) {
-    // Busca dados extras desse aluno
-    const { data: inscricoes } = await supabase.from('inscricoes').select('*, eventos(titulo)').eq('aluno_id', aluno.id)
-    const { data: financeiro } = await supabase.from('mensalidades').select('*').eq('aluno_id', aluno.id).order('vencimento', {ascending: false})
-    
-    setAlunoDetalhe({
-      ...aluno,
-      historicoInscricoes: inscricoes || [],
-      mensalidades: financeiro || []
-    })
-  }
-
-  if (loading) return <div className="p-10 text-center font-bold">Carregando Sistema...</div>
+  if (loading) return <div className="p-10 text-center font-bold">Carregando Admin...</div>
 
   return (
     <div className="min-h-screen bg-gray-100 p-6">
       <div className="max-w-7xl mx-auto">
         <div className="flex justify-between items-center mb-6">
-          <h1 className="text-3xl font-bold text-gray-800">Painel Admin 🛡️</h1>
+          <h1 className="text-3xl font-bold text-gray-800">Painel Admin SDC 🛡️</h1>
           <button onClick={() => router.push('/dashboard')} className="text-blue-600 underline">Voltar</button>
         </div>
 
-        {/* MENU */}
+        {/* Menu de Abas */}
         <div className="flex gap-4 mb-6 border-b pb-2">
-          <button onClick={() => setAba('financeiro')} className={`px-4 py-2 rounded font-bold ${aba === 'financeiro' ? 'bg-blue-600 text-white' : 'bg-white'}`}>Financeiro</button>
-          <button onClick={() => setAba('alunos')} className={`px-4 py-2 rounded font-bold ${aba === 'alunos' ? 'bg-blue-600 text-white' : 'bg-white'}`}>Alunos</button>
+          <button onClick={() => setAba('eventos')} className={`px-4 py-2 rounded font-bold ${aba === 'eventos' ? 'bg-black text-white' : 'bg-white text-gray-700'}`}>Eventos</button>
+          <button onClick={() => setAba('financeiro')} className={`px-4 py-2 rounded font-bold ${aba === 'financeiro' ? 'bg-black text-white' : 'bg-white text-gray-700'}`}>Financeiro</button>
+          <button onClick={() => setAba('alunos')} className={`px-4 py-2 rounded font-bold ${aba === 'alunos' ? 'bg-black text-white' : 'bg-white text-gray-700'}`}>Alunos</button>
         </div>
 
-        {/* --- ABA FINANCEIRO --- */}
-        {aba === 'financeiro' && (
-          <div className="bg-white p-6 rounded shadow">
-            <h2 className="text-xl font-bold mb-4 text-black">Fluxo de Caixa</h2>
-            <table className="w-full text-left">
-              <thead className="bg-gray-50 text-gray-600">
-                <tr><th>Referência</th><th>Aluno</th><th>Vencimento</th><th>Valor</th><th>Status</th></tr>
-              </thead>
-              <tbody>
-                {mensalidades.map(m => (
-                  <tr key={m.id} className="border-b hover:bg-gray-50 text-gray-700">
-                    <td className="p-3 font-bold text-blue-800">{formatarMes(m.mes_referencia)}</td>
-                    <td>{m.alunos?.nome}</td>
-                    <td>{m.vencimento}</td>
-                    <td>R$ {m.valor}</td>
-                    <td>
-                      <button 
-                        onClick={() => alternarMensalidade(m.id, m.status)}
-                        className={`px-3 py-1 rounded text-xs font-bold w-24 ${
-                          m.status === 'pago' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                        }`}
-                      >
-                        {m.status.toUpperCase()}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {/* --- ABA ALUNOS --- */}
-        {aba === 'alunos' && (
-          <div className="grid md:grid-cols-3 gap-6">
-            
-            {/* LISTA DE ALUNOS (Esquerda) */}
-            <div className="md:col-span-2 bg-white p-6 rounded shadow">
-              <h2 className="text-xl font-bold mb-4 text-black">Lista de Atletas ({alunos.length})</h2>
-              <div className="max-h-[600px] overflow-y-auto space-y-2">
-                {alunos.map(a => (
-                  <div 
-                    key={a.id} 
-                    onClick={() => abrirDetalhes(a)}
-                    className="flex justify-between items-center p-4 border rounded hover:bg-blue-50 cursor-pointer transition"
-                  >
-                    <div>
-                      <p className="font-bold text-lg text-gray-800">{a.nome}</p>
-                      <p className="text-sm text-gray-500">{a.posicao} • {calcularIdade(a.data_nascimento)} anos</p>
-                      <p className="text-xs text-gray-400">Resp: {a.profiles?.nome_completo}</p>
-                    </div>
-                    <span className="text-blue-600 text-sm font-bold">Ver Dossiê &rarr;</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* CADASTRO MANUAL (Direita) */}
+        {/* ABA EVENTOS (RESTAURADA) */}
+        {aba === 'eventos' && (
+          <div className="grid md:grid-cols-2 gap-6">
+            {/* Form Criar */}
             <div className="bg-white p-6 rounded shadow h-fit">
-              <h2 className="text-lg font-bold mb-4 text-black">Cadastrar Novo Aluno</h2>
-              <form onSubmit={cadastrarAlunoAdmin} className="space-y-3">
-                <input required placeholder="E-mail do Responsável (Já cadastrado)" className="w-full border p-2 rounded text-black bg-yellow-50" value={novoAluno.email_responsavel} onChange={e => setNovoAluno({...novoAluno, email_responsavel: e.target.value})} />
-                <input required placeholder="Nome do Aluno" className="w-full border p-2 rounded text-black" value={novoAluno.nome} onChange={e => setNovoAluno({...novoAluno, nome: e.target.value})} />
-                <input required type="date" className="w-full border p-2 rounded text-black" value={novoAluno.data_nascimento} onChange={e => setNovoAluno({...novoAluno, data_nascimento: e.target.value})} />
-                <input required placeholder="Posição (ex: Goleiro)" className="w-full border p-2 rounded text-black" value={novoAluno.posicao} onChange={e => setNovoAluno({...novoAluno, posicao: e.target.value})} />
-                <textarea placeholder="Endereço Completo" className="w-full border p-2 rounded text-black" value={novoAluno.endereco} onChange={e => setNovoAluno({...novoAluno, endereco: e.target.value})} />
-                <button type="submit" className="w-full bg-black text-white p-2 rounded font-bold hover:bg-gray-800">Salvar Aluno</button>
+              <h2 className="text-xl font-bold mb-4 text-black">Novo Evento</h2>
+              <form onSubmit={criarEvento} className="space-y-3">
+                <input required placeholder="Título" className="w-full border p-2 rounded text-black" value={novoEvento.titulo} onChange={e => setNovoEvento({...novoEvento, titulo: e.target.value})} />
+                <div className="flex gap-2">
+                   <input required type="datetime-local" className="w-1/2 border p-2 rounded text-black" value={novoEvento.data} onChange={e => setNovoEvento({...novoEvento, data: e.target.value})} />
+                   <input type="number" placeholder="R$" className="w-1/2 border p-2 rounded text-black" value={novoEvento.valor} onChange={e => setNovoEvento({...novoEvento, valor: e.target.value})} />
+                </div>
+                <input required placeholder="Local" className="w-full border p-2 rounded text-black" value={novoEvento.local} onChange={e => setNovoEvento({...novoEvento, local: e.target.value})} />
+                <textarea placeholder="Descrição" className="w-full border p-2 rounded text-black" value={novoEvento.descricao} onChange={e => setNovoEvento({...novoEvento, descricao: e.target.value})} />
+                <button type="submit" className="w-full bg-green-600 text-white p-2 rounded font-bold">Criar Evento</button>
               </form>
             </div>
+
+            {/* Lista Eventos */}
+            <div className="bg-white p-6 rounded shadow">
+              <h2 className="text-xl font-bold mb-4 text-black">Eventos Ativos</h2>
+              {eventos.map(ev => (
+                <div key={ev.id} className="border-b py-3 flex justify-between items-center">
+                  <div>
+                    <p className="font-bold text-gray-800">{ev.titulo}</p>
+                    <p className="text-sm text-gray-500">{new Date(ev.data_hora).toLocaleString()} • R$ {ev.valor}</p>
+                    <p className="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded w-fit mt-1">
+                      {ev.qtd_inscritos} alunos inscritos
+                    </p>
+                  </div>
+                  <button onClick={() => deletarEvento(ev.id)} className="text-red-500 hover:text-red-700 text-sm border border-red-200 px-3 py-1 rounded">
+                    Deletar
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
-      </div>
-
-      {/* --- MODAL: DOSSIÊ DO ALUNO --- */}
-      {alunoDetalhe && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl p-8 relative max-h-screen overflow-y-auto">
-            <button onClick={() => setAlunoDetalhe(null)} className="absolute top-4 right-4 text-gray-400 hover:text-black font-bold text-xl">X</button>
-            
-            <div className="flex justify-between items-start mb-6 border-b pb-4">
-              <div>
-                <h2 className="text-3xl font-bold text-gray-800">{alunoDetalhe.nome}</h2>
-                <p className="text-gray-500 text-lg">{alunoDetalhe.posicao} • {calcularIdade(alunoDetalhe.data_nascimento)} anos</p>
-              </div>
-              <button onClick={() => deletarAluno(alunoDetalhe.id)} className="bg-red-50 text-red-600 px-4 py-2 rounded text-sm hover:bg-red-100">Excluir Aluno do Sistema</button>
+        {/* ABA FINANCEIRO */}
+        {aba === 'financeiro' && (
+          <div className="bg-white p-6 rounded shadow">
+            <h2 className="text-xl font-bold mb-4 text-black">Mensalidades</h2>
+            <div className="space-y-2">
+              {mensalidades.map(m => (
+                <div key={m.id} className="flex justify-between items-center border-b py-2">
+                  <span className="text-gray-700">{m.alunos?.nome} - {new Date(m.mes_referencia).toLocaleDateString('pt-BR', {month:'long'})}</span>
+                  <button onClick={() => alternarMensalidade(m.id, m.status)} className={`px-2 py-1 rounded text-xs font-bold ${m.status === 'pago' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                    {m.status.toUpperCase()}
+                  </button>
+                </div>
+              ))}
             </div>
-
-            <div className="grid md:grid-cols-2 gap-8">
-              {/* Lado Esquerdo: Dados Pessoais */}
-              <div className="space-y-4">
-                <div className="bg-gray-50 p-4 rounded">
-                  <h3 className="font-bold text-gray-700 mb-2">📍 Endereço</h3>
-                  <p className="text-gray-600">{alunoDetalhe.endereco || 'Endereço não cadastrado.'}</p>
-                </div>
-                <div className="bg-gray-50 p-4 rounded">
-                  <h3 className="font-bold text-gray-700 mb-2">👨‍👩‍👦 Responsável</h3>
-                  <p className="text-gray-600"><span className="font-bold">Nome:</span> {alunoDetalhe.profiles?.nome_completo}</p>
-                  <p className="text-gray-600"><span className="font-bold">Email:</span> {alunoDetalhe.profiles?.email}</p>
-                  <p className="text-gray-600"><span className="font-bold">Tel:</span> {alunoDetalhe.profiles?.telefone || 'Sem telefone'}</p>
-                </div>
-              </div>
-
-              {/* Lado Direito: Eventos e Financeiro */}
-              <div className="space-y-4">
-                <div className="border rounded p-4">
-                  <h3 className="font-bold text-gray-700 mb-2">🏆 Eventos Inscritos</h3>
-                  {alunoDetalhe.historicoInscricoes?.length === 0 ? <p className="text-xs text-gray-400">Nenhum evento.</p> : (
-                    <ul className="space-y-1">
-                      {alunoDetalhe.historicoInscricoes?.map(i => (
-                        <li key={i.id} className="text-sm text-gray-600 flex justify-between">
-                          <span>{i.eventos?.titulo}</span>
-                          <span className={i.pago ? 'text-green-600 font-bold' : 'text-red-500'}>{i.pago ? 'Pago' : 'A pagar'}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-
-                <div className="border rounded p-4">
-                  <h3 className="font-bold text-gray-700 mb-2">💰 Histórico Financeiro</h3>
-                  <div className="max-h-40 overflow-y-auto">
-                     {alunoDetalhe.mensalidades?.map(m => (
-                       <div key={m.id} className="flex justify-between text-sm py-1 border-b last:border-0">
-                         <span className="text-gray-600">{formatarMes(m.mes_referencia)}</span>
-                         <span className={`font-bold cursor-pointer ${m.status === 'pago' ? 'text-green-600' : 'text-red-600'}`} onClick={() => alternarMensalidade(m.id, m.status)}>
-                           {m.status.toUpperCase()}
-                         </span>
-                       </div>
-                     ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-
           </div>
-        </div>
-      )}
+        )}
+        
+        {/* ABA ALUNOS */}
+        {aba === 'alunos' && (
+           <div className="bg-white p-6 rounded shadow">
+             <h2 className="text-xl font-bold mb-4 text-black">Todos os Alunos</h2>
+             {alunos.map(a => (
+               <div key={a.id} className="border-b py-2 text-gray-700">
+                 <p className="font-bold">{a.nome}</p>
+                 <p className="text-xs text-gray-500">Resp: {a.profiles?.nome_completo} - {a.profiles?.telefone}</p>
+               </div>
+             ))}
+           </div>
+        )}
+      </div>
     </div>
   )
 }

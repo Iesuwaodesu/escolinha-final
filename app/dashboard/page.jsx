@@ -12,20 +12,18 @@ export default function Dashboard() {
   const router = useRouter()
   const [loading, setLoading] = useState(true)
   
-  // Dados
+  // Estados
   const [user, setUser] = useState(null)
+  const [isAdmin, setIsAdmin] = useState(false)
+  
   const [alunos, setAlunos] = useState([])
   const [alunoSelecionado, setAlunoSelecionado] = useState(null)
-  const [mensalidades, setMensalidades] = useState([])
-  const [eventos, setEventos] = useState([])
-  const [isAdmin, setIsAdmin] = useState(false)
-
-  // Modais
-  const [modalEvento, setModalEvento] = useState(null)
-  const [modalCadastro, setModalCadastro] = useState(false)
   
-  // Form Novo Aluno
-  const [novoAluno, setNovoAluno] = useState({ nome: '', data_nascimento: '', posicao: '', endereco: '' })
+  const [mensalidades, setMensalidades] = useState([])
+  const [eventosDisponiveis, setEventosDisponiveis] = useState([])
+  const [eventosInscritos, setEventosInscritos] = useState([])
+  
+  const [modalEvento, setModalEvento] = useState(null)
 
   useEffect(() => {
     carregar()
@@ -36,6 +34,7 @@ export default function Dashboard() {
     if (!user) { router.push('/'); return }
     setUser(user)
 
+    // Checa Admin
     const { data: profile } = await supabase.from('profiles').select('is_admin').eq('id', user.id).single()
     setIsAdmin(profile?.is_admin)
 
@@ -43,176 +42,198 @@ export default function Dashboard() {
     const { data: dataAlunos } = await supabase.from('alunos').select('*').eq('responsavel_id', user.id)
     if (dataAlunos?.length > 0) {
       setAlunos(dataAlunos)
-      // Se não tiver selecionado, seleciona o primeiro. Se tiver, mantem.
-      setAlunoSelecionado(prev => prev ? prev : dataAlunos[0])
+      setAlunoSelecionado(dataAlunos[0])
     }
     
-    // Busca Eventos
-    const { data: dataEventos } = await supabase.from('eventos').select('*').gte('data_hora', new Date().toISOString()).order('data_hora')
-    setEventos(dataEventos || [])
+    // Busca Eventos Futuros (Geral)
+    const { data: evs } = await supabase.from('eventos').select('*').gte('data_hora', new Date().toISOString()).order('data_hora')
+    setEventosDisponiveis(evs || [])
     
     setLoading(false)
   }
 
-  // Carrega financeiro quando troca de filho
+  // Carrega dados específicos do filho selecionado
   useEffect(() => {
     if (!alunoSelecionado) return
-    supabase.from('mensalidades').select('*').eq('aluno_id', alunoSelecionado.id).order('vencimento', {ascending:false}).then(({data}) => setMensalidades(data || []))
+    
+    // 1. Mensalidades
+    supabase.from('mensalidades')
+      .select('*')
+      .eq('aluno_id', alunoSelecionado.id)
+      .order('vencimento', {ascending: false})
+      .then(({data}) => setMensalidades(data || []))
+
+    // 2. Inscrições deste aluno
+    supabase.from('inscricoes')
+      .select('*, eventos(*)')
+      .eq('aluno_id', alunoSelecionado.id)
+      .then(({data}) => {
+         // Filtra para pegar apenas os objetos de evento
+         const lista = data?.map(insc => ({ ...insc.eventos, status_pgto: insc.pago })) || []
+         setEventosInscritos(lista)
+      })
+
   }, [alunoSelecionado])
 
   function formatarMes(dataString) {
+    // Corrige fuso
     const data = new Date(dataString)
-    const offset = data.getTimezoneOffset() * 60000;
-    return new Date(data.getTime() + offset).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }).toUpperCase()
-  }
-
-  async function cadastrarFilho(e) {
-    e.preventDefault()
-    const { error } = await supabase.from('alunos').insert({
-      responsavel_id: user.id,
-      ...novoAluno
-    })
-
-    if (error) alert('Erro: ' + error.message)
-    else {
-      alert('Aluno cadastrado com sucesso!')
-      setModalCadastro(false)
-      setNovoAluno({ nome: '', data_nascimento: '', posicao: '', endereco: '' })
-      // Recarrega lista
-      const { data } = await supabase.from('alunos').select('*').eq('responsavel_id', user.id)
-      setAlunos(data)
-      setAlunoSelecionado(data[data.length - 1]) // Seleciona o novo
-    }
+    const userTimezoneOffset = data.getTimezoneOffset() * 60000;
+    const dataCorrigida = new Date(data.getTime() + userTimezoneOffset);
+    return dataCorrigida.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }).toUpperCase()
   }
 
   async function inscrever() {
     if(!modalEvento) return;
     const { error } = await supabase.from('inscricoes').insert({ evento_id: modalEvento.id, aluno_id: alunoSelecionado.id })
+    
     if (error) alert('Aluno já inscrito neste evento.')
-    else { alert('Inscrição realizada!'); setModalEvento(null); }
+    else {
+      alert('Inscrição realizada com sucesso! 🎉')
+      setModalEvento(null)
+      // Recarrega a página para atualizar listas
+      window.location.reload()
+    }
   }
 
-  if (loading) return <div className="p-10 text-center text-black">Carregando...</div>
+  if (loading) return <div className="p-10 text-center text-black">Carregando Painel...</div>
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 md:p-8">
+    <div className="min-h-screen bg-gray-50 p-4 pb-20">
       <div className="max-w-5xl mx-auto">
         
         {/* HEADER */}
-        <div className="flex justify-between items-center mb-8 bg-white p-4 rounded-xl shadow-sm">
+        <div className="flex justify-between items-center mb-6 bg-white p-4 rounded-xl shadow-sm">
           <div>
-            <h1 className="text-2xl font-bold text-gray-800">Painel dos Pais</h1>
-            <p className="text-sm text-gray-500">Gerencie seus atletas.</p>
+            <h1 className="text-xl font-bold text-gray-800">Painel do Responsável</h1>
+            <p className="text-xs text-gray-500">Escolinha SDC Guarapari</p>
           </div>
           <div className="flex gap-2">
-            {isAdmin && <button onClick={() => router.push('/admin')} className="bg-black text-white px-4 py-2 rounded text-sm font-bold">Admin 👔</button>}
-            <button onClick={() => {supabase.auth.signOut(); router.push('/')}} className="text-red-600 px-3 py-2 text-sm hover:underline">Sair</button>
+            {isAdmin && <button onClick={() => router.push('/admin')} className="bg-black text-white px-3 py-1 rounded text-xs font-bold">Admin</button>}
+            <button onClick={() => {supabase.auth.signOut(); router.push('/')}} className="text-red-600 px-2 text-xs hover:underline">Sair</button>
           </div>
         </div>
 
-        {/* BARRA DE CONTROLE: SELETOR + BOTÃO ADICIONAR */}
-        <div className="flex flex-col md:flex-row justify-between items-end md:items-center mb-6 gap-4">
-          <div className="w-full md:w-auto">
-            {alunos.length > 0 ? (
-              <>
-                <label className="text-xs font-bold text-gray-500 uppercase">Visualizando:</label>
+        {alunos.length === 0 ? (
+          <div className="bg-yellow-100 text-yellow-800 p-4 rounded">Nenhum aluno encontrado. Cadastre um novo aluno na tela inicial.</div>
+        ) : (
+          <>
+            {/* SELEÇÃO DE FILHO */}
+            <div className="mb-6">
+              <label className="text-xs font-bold text-gray-500 uppercase">Aluno Selecionado:</label>
+              <div className="flex items-center gap-3 mt-1">
+                {alunoSelecionado?.foto_url && (
+                  <img src={alunoSelecionado.foto_url} alt="Foto" className="w-12 h-12 rounded-full object-cover border-2 border-green-500" />
+                )}
                 <select 
-                  className="block mt-1 w-full md:w-64 p-2 border rounded text-black bg-white shadow-sm"
+                  className="block w-full md:w-64 p-2 border rounded text-black bg-white shadow-sm"
                   onChange={e => setAlunoSelecionado(alunos.find(a => a.id === e.target.value))}
                   value={alunoSelecionado?.id}
                 >
                   {alunos.map(a => <option key={a.id} value={a.id}>{a.nome}</option>)}
                 </select>
-              </>
-            ) : <p className="text-gray-500">Nenhum aluno cadastrado ainda.</p>}
-          </div>
+              </div>
+            </div>
 
-          <button 
-            onClick={() => setModalCadastro(true)}
-            className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded shadow font-bold text-sm flex items-center gap-2"
-          >
-            + Adicionar Novo Aluno
-          </button>
-        </div>
-
-        {alunos.length > 0 && alunoSelecionado && (
-          <div className="grid md:grid-cols-2 gap-6">
-            
-            {/* CARD MENSALIDADES */}
-            <div className="bg-white p-6 rounded-xl shadow-sm border h-fit">
-              <h2 className="font-bold text-lg mb-4 text-gray-800 flex items-center gap-2">💰 Mensalidades ({alunoSelecionado.nome.split(' ')[0]})</h2>
-              {mensalidades.length === 0 ? <p className="text-gray-400 italic">Tudo em dia!</p> : (
-                <div className="space-y-3">
-                  {mensalidades.map(m => (
-                    <div key={m.id} className="flex justify-between items-center p-3 bg-gray-50 rounded border">
-                      <div>
-                        <p className="font-bold text-blue-900 text-sm">{formatarMes(m.mes_referencia)}</p>
-                        <p className="text-xs text-gray-500">Venc: {m.vencimento} • R$ {m.valor}</p>
+            <div className="grid md:grid-cols-2 gap-6">
+              
+              {/* CARD MENSALIDADES */}
+              <div className="bg-white p-6 rounded-xl shadow-sm border h-fit">
+                <h2 className="font-bold text-lg mb-4 text-gray-800 flex items-center gap-2">💰 Mensalidades</h2>
+                {mensalidades.length === 0 ? <p className="text-gray-400 text-sm">Nenhum histórico.</p> : (
+                  <div className="space-y-3">
+                    {mensalidades.map(m => (
+                      <div key={m.id} className="flex justify-between items-center p-3 bg-gray-50 rounded border">
+                        <div>
+                          <p className="font-bold text-blue-900 text-sm">{formatarMes(m.mes_referencia)}</p>
+                          <p className="text-xs text-gray-500">Venc: {m.vencimento} • R$ {m.valor}</p>
+                        </div>
+                        <span className={`px-2 py-1 rounded text-[10px] font-bold ${m.status === 'pago' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                          {m.status.toUpperCase()}
+                        </span>
                       </div>
-                      <span className={`px-2 py-1 rounded text-xs font-bold ${m.status === 'pago' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                        {m.status.toUpperCase()}
-                      </span>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
+                )}
+                
+                {/* ÁREA PIX */}
+                <div className="mt-6 border-t pt-4">
+                  <p className="text-xs text-gray-500 font-bold mb-1">PAGAMENTO VIA PIX</p>
+                  <div className="bg-gray-100 p-3 rounded text-center">
+                    <p className="text-sm font-mono text-gray-800 break-all select-all">00.000.000/0001-00</p>
+                    <p className="text-[10px] text-gray-400 mt-1">(CNPJ SDC Guarapari - Copie e Cole)</p>
+                  </div>
                 </div>
-              )}
-            </div>
+              </div>
 
-            {/* CARD EVENTOS */}
-            <div className="bg-white p-6 rounded-xl shadow-sm border h-fit">
-              <h2 className="font-bold text-lg mb-4 text-gray-800 flex items-center gap-2">🏆 Eventos Disponíveis</h2>
-              {eventos.length === 0 ? <p className="text-gray-400 italic">Nenhum evento futuro.</p> : (
-                <div className="space-y-4">
-                  {eventos.map(ev => (
-                    <div 
-                      key={ev.id} 
-                      onClick={() => setModalEvento(ev)}
-                      className="cursor-pointer border-l-4 border-blue-500 pl-4 py-2 hover:bg-blue-50 transition rounded-r"
-                    >
-                      <h3 className="font-bold text-gray-800">{ev.titulo}</h3>
-                      <p className="text-xs text-gray-500">📅 {new Date(ev.data_hora).toLocaleString()}</p>
-                      <p className="text-xs text-blue-600 font-bold mt-1">Ver detalhes &rarr;</p>
+              {/* CARD EVENTOS */}
+              <div className="space-y-6">
+                
+                {/* PRÓXIMOS EVENTOS (Disponíveis) */}
+                <div className="bg-white p-6 rounded-xl shadow-sm border">
+                  <h2 className="font-bold text-lg mb-4 text-gray-800">🏆 Próximos Eventos</h2>
+                  {eventosDisponiveis.length === 0 ? <p className="text-gray-400 text-sm">Nenhum evento aberto.</p> : (
+                    <div className="space-y-3">
+                      {eventosDisponiveis.map(ev => (
+                        <div 
+                          key={ev.id} 
+                          onClick={() => setModalEvento(ev)}
+                          className="cursor-pointer border-l-4 border-blue-500 pl-4 py-2 hover:bg-blue-50 transition rounded-r bg-gray-50"
+                        >
+                          <h3 className="font-bold text-gray-800 text-sm">{ev.titulo}</h3>
+                          <p className="text-xs text-gray-500">📅 {new Date(ev.data_hora).toLocaleDateString()}</p>
+                          <p className="text-xs text-blue-600 font-bold mt-1">Toque para inscrever &rarr;</p>
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                  )}
                 </div>
-              )}
+
+                {/* EVENTOS JÁ INSCRITOS */}
+                <div className="bg-green-50 p-6 rounded-xl shadow-sm border border-green-100">
+                  <h2 className="font-bold text-lg mb-4 text-green-800">✅ Inscrito em:</h2>
+                  {eventosInscritos.length === 0 ? <p className="text-green-700 text-sm opacity-60">Nenhuma inscrição ativa.</p> : (
+                    <ul className="space-y-2">
+                      {eventosInscritos.map((ev, i) => (
+                        <li key={i} className="text-sm text-green-900 flex items-center gap-2">
+                           ⚽ {ev.titulo} 
+                           <span className="text-[10px] bg-white px-2 rounded-full border border-green-200">
+                             {new Date(ev.data_hora).toLocaleDateString()}
+                           </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+
+              </div>
             </div>
-          </div>
+          </>
         )}
-
       </div>
 
       {/* --- MODAL DE EVENTO --- */}
       {modalEvento && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 relative">
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 relative animate-in fade-in zoom-in duration-200">
             <button onClick={() => setModalEvento(null)} className="absolute top-4 right-4 text-gray-400 hover:text-black font-bold">X</button>
+            
             <h2 className="text-2xl font-bold text-gray-800 mb-2">{modalEvento.titulo}</h2>
-            <div className="space-y-2 text-gray-600 mb-6">
-              <p>📍 {modalEvento.local}</p>
-              <p>💰 Valor: {modalEvento.valor > 0 ? `R$ ${modalEvento.valor}` : 'Grátis'}</p>
-              <p className="italic bg-gray-50 p-2 rounded text-sm">{modalEvento.descricao}</p>
-            </div>
-            <button onClick={inscrever} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg">Confirmar Inscrição</button>
-          </div>
-        </div>
-      )}
-
-      {/* --- MODAL CADASTRO DE ALUNO --- */}
-      {modalCadastro && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 relative">
-            <button onClick={() => setModalCadastro(false)} className="absolute top-4 right-4 text-gray-400 hover:text-black font-bold">X</button>
-            <h2 className="text-xl font-bold text-gray-800 mb-4">Cadastrar Novo Atleta</h2>
-            <form onSubmit={cadastrarFilho} className="space-y-3">
-              <input required placeholder="Nome Completo" className="w-full border p-2 rounded text-black" value={novoAluno.nome} onChange={e => setNovoAluno({...novoAluno, nome: e.target.value})} />
-              <div className="flex gap-2">
-                 <input required type="date" className="w-full border p-2 rounded text-black" value={novoAluno.data_nascimento} onChange={e => setNovoAluno({...novoAluno, data_nascimento: e.target.value})} />
-                 <input required placeholder="Posição" className="w-full border p-2 rounded text-black" value={novoAluno.posicao} onChange={e => setNovoAluno({...novoAluno, posicao: e.target.value})} />
+            <div className="space-y-3 text-gray-600 mb-6 text-sm">
+              <p><strong>📍 Local:</strong> {modalEvento.local}</p>
+              <p><strong>📅 Data:</strong> {new Date(modalEvento.data_hora).toLocaleString()}</p>
+              <p><strong>💰 Valor:</strong> {modalEvento.valor > 0 ? `R$ ${modalEvento.valor}` : 'Grátis'}</p>
+              <div className="bg-gray-100 p-3 rounded italic border-l-2 border-gray-300">
+                {modalEvento.descricao || 'Sem descrição.'}
               </div>
-              <textarea placeholder="Endereço Completo" className="w-full border p-2 rounded text-black" value={novoAluno.endereco} onChange={e => setNovoAluno({...novoAluno, endereco: e.target.value})} />
-              <button type="submit" className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-lg">Salvar Cadastro</button>
-            </form>
+            </div>
+
+            <button 
+              onClick={inscrever}
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg shadow-lg transform active:scale-95 transition"
+            >
+              Confirmar Inscrição de {alunoSelecionado?.nome.split(' ')[0]}
+            </button>
           </div>
         </div>
       )}
