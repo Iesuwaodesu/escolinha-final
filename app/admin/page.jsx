@@ -21,7 +21,7 @@ export default function AdminPanel() {
   const [mensalidades, setMensalidades] = useState([])
   const [inscricoes, setInscricoes] = useState([])
   
-  // Estados de Detalhes e Edição
+  // Detalhes e Edição
   const [alunoDetalhe, setAlunoDetalhe] = useState(null)
   const [editandoAluno, setEditandoAluno] = useState(false)
   const [formEdicao, setFormEdicao] = useState({})
@@ -33,8 +33,6 @@ export default function AdminPanel() {
   const [novoEvento, setNovoEvento] = useState({ titulo: '', data: '', local: '', descricao: '', valor: '' })
   const [arquivoEvento, setArquivoEvento] = useState(null)
   const [novoAdmin, setNovoAdmin] = useState({ nome: '', email: '', senha: '' })
-  
-  // Form Financeiro Manual (QUE TINHA SUMIDO)
   const [novaCobranca, setNovaCobranca] = useState({ aluno_id: '', mes: '', valor: '150' })
 
   // Config Carteirinha
@@ -71,17 +69,29 @@ export default function AdminPanel() {
 
   const handleLogout = async () => { await supabase.auth.signOut(); router.push('/') }
 
-  // --- FUNÇÕES DE WHATSAPP (RESTAURADAS) ---
+  // --- FUNÇÕES DE FORMATAR ---
+  // Função para deixar o mês legível (ex: Janeiro de 2025)
+  function formatarMesExtenso(dataString) {
+    if (!dataString) return '--'
+    const data = new Date(dataString)
+    // Ajuste de fuso horário para garantir o mês correto
+    const dataCorrigida = new Date(data.getTime() + (data.getTimezoneOffset() * 60000))
+    return dataCorrigida.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }).toUpperCase()
+  }
+
+  // --- FUNÇÕES DE WHATSAPP ---
   function enviarCobranca(fatura) {
-    // Tenta pegar telefone da fatura ou do objeto aluno direto
     const telefoneBruto = fatura.alunos?.profiles?.telefone || fatura.profiles?.telefone
     const tel = telefoneBruto?.replace(/\D/g, '')
     
     if (!tel) return alert('Telefone do responsável não cadastrado.')
     
-    const nomeAluno = fatura.alunos?.nome || fatura.nome // Fallback se vier direto do objeto aluno
+    const nomeAluno = fatura.alunos?.nome || fatura.nome 
+    // Usa o mês de referência para a mensagem ficar clara
+    const mesReferencia = formatarMesExtenso(fatura.mes_referencia)
+    
     const msg = fatura.valor 
-      ? `Olá! ⚽ Passando para lembrar sobre a mensalidade de *${new Date(fatura.mes_referencia).toLocaleDateString('pt-BR', { month: 'long' })}* do atleta *${nomeAluno}* (R$ ${fatura.valor}).`
+      ? `Olá! ⚽ Passando para lembrar sobre a mensalidade referente a *${mesReferencia}* do atleta *${nomeAluno}* (R$ ${fatura.valor}).`
       : `Olá! Gostaria de falar sobre o atleta *${nomeAluno}*.`
 
     window.open(`https://wa.me/55${tel}?text=${encodeURIComponent(msg)}`, '_blank')
@@ -91,7 +101,7 @@ export default function AdminPanel() {
     const data = new Date(ev.data_hora).toLocaleString()
     const msg = `🏆 *${ev.titulo}* 🏆\n📅 Data: ${data}\n📍 Local: ${ev.local}\n💰 Valor: ${ev.valor > 0 ? 'R$ '+ev.valor : 'Grátis'}\n\n📝 Inscrições abertas no App!`
     navigator.clipboard.writeText(msg)
-    alert('Convite copiado para a área de transferência!')
+    alert('Convite copiado!')
   }
 
   // --- FUNÇÕES CARTEIRINHA ---
@@ -107,7 +117,7 @@ export default function AdminPanel() {
       u = supabase.storage.from('arquivos-eventos').getPublicUrl(n).data.publicUrl
     }
     await supabase.from('eventos').insert({ ...novoEvento, valor: Number(novoEvento.valor), arquivo_url: u })
-    alert('Evento Criado!'); setNovoEvento({ titulo: '', data: '', local: '', descricao: '', valor: '' }); carregarTudo()
+    alert('Evento Criado!'); setNovoEvento({ titulo: '', data: '', local: '', descricao: '', valor: '' }); setArquivoEvento(null); carregarTudo()
   }
 
   async function deletarEvento(id) { if(confirm('Apagar?')) { await supabase.from('inscricoes').delete().eq('evento_id', id); await supabase.from('eventos').delete().eq('id', id); carregarTudo() } }
@@ -122,7 +132,7 @@ export default function AdminPanel() {
     if (error) alert(error.message); else { setTimeout(async()=>{await supabase.from('profiles').update({is_admin:true}).eq('id',data.user.id);alert('Admin criado!')},1500) }
   }
 
-  // FINANCEIRO MANUAL (RESTAURADO)
+  // FINANCEIRO
   async function criarMensalidadeManual(e) {
     e.preventDefault()
     if(!novaCobranca.aluno_id || !novaCobranca.mes) return alert('Preencha tudo')
@@ -138,7 +148,7 @@ export default function AdminPanel() {
 
   async function alternarMensalidade(id, s) { await supabase.from('mensalidades').update({status: s==='pago'?'pendente':'pago'}).eq('id',id); carregarTudo() }
 
-  // EDIÇÃO ALUNO (RESTAURADO)
+  // EDIÇÃO ALUNO
   function abrirDetalhes(aluno) { setAlunoDetalhe(aluno); setEditandoAluno(false); setFormEdicao({ nome: aluno.nome, posicao: aluno.posicao, data_nascimento: aluno.data_nascimento, endereco: aluno.endereco, data_inicio_pagamento: aluno.data_inicio_pagamento }) }
   
   async function salvarEdicaoAluno() {
@@ -158,7 +168,10 @@ export default function AdminPanel() {
     <div className="min-h-screen bg-gray-100 p-6 font-sans print:bg-white print:p-0">
       <div className="max-w-7xl mx-auto">
         <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4 bg-white p-4 rounded shadow-sm print:hidden">
-          <div><h1 className="text-2xl font-bold text-gray-800">Painel Admin</h1><p className="text-xs text-gray-400">Logado: {userProfile?.email}</p></div>
+          <div className="flex items-center gap-4">
+             <img src="/logo.png" alt="Admin" className="h-12 w-auto object-contain" onError={(e) => e.target.style.display='none'} />
+             <div><h1 className="text-2xl font-bold text-gray-800">Painel Admin</h1><p className="text-xs text-gray-400">{userProfile?.email}</p></div>
+          </div>
           <div className="flex gap-3"><input placeholder="🔍 Buscar..." className="p-2 border rounded w-full md:w-64 text-black text-sm" value={busca} onChange={e => setBusca(e.target.value)} /><button onClick={handleLogout} className="bg-red-600 text-white px-4 py-2 rounded text-sm font-bold">SAIR</button></div>
         </div>
         <div className="flex gap-2 mb-6 border-b pb-2 overflow-x-auto print:hidden">
@@ -168,7 +181,7 @@ export default function AdminPanel() {
         {/* --- ABA ALUNOS --- */}
         {aba === 'alunos' && (
           <div className="bg-white p-6 rounded shadow-sm print:hidden">
-            <h2 className="text-xl font-bold text-gray-800 mb-4">Gerenciar Alunos</h2>
+            <h2 className="text-xl font-bold text-gray-800 mb-4">Gerenciar Alunos ({alunosFiltrados.length})</h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {alunosFiltrados.map(a => (
                 <div key={a.id} className="border p-4 rounded hover:bg-gray-50 flex gap-3 items-center relative group">
@@ -176,8 +189,7 @@ export default function AdminPanel() {
                      {a.foto_url ? <img src={a.foto_url} className="w-12 h-12 rounded-full object-cover border"/> : <div className="w-12 h-12 bg-gray-200 rounded-full flex items-center justify-center">👤</div>}
                      <div><p className="font-bold text-gray-800">{a.nome}</p><p className="text-xs text-gray-500 font-bold">{a.posicao}</p><p className="text-xs text-gray-400">Resp: {a.profiles?.nome_completo}</p></div>
                    </div>
-                   {/* BOTÃO WHATSAPP RESTAURADO */}
-                   <button onClick={() => enviarCobranca(a)} className="bg-green-500 text-white p-2 rounded-full hover:bg-green-600 shadow-sm" title="Conversar no Zap">📱</button>
+                   <button onClick={() => enviarCobranca({alunos: a, valor: 'Mensalidade', mes_referencia: new Date().toISOString()})} className="bg-green-500 text-white p-2 rounded-full hover:bg-green-600 shadow-sm" title="Conversar no Zap">📱</button>
                 </div>
               ))}
             </div>
@@ -210,7 +222,6 @@ export default function AdminPanel() {
                       <p className="text-sm text-gray-500">{new Date(ev.data_hora).toLocaleString()} • {ev.valor > 0 ? `R$ ${ev.valor}` : 'Grátis'}</p>
                       <div className="flex gap-2 mt-1">
                         <button onClick={() => setEventoDetalhe(ev)} className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded hover:bg-blue-200">👥 Ver {qtd} Inscritos</button>
-                        {/* BOTÃO COPIAR CONVITE RESTAURADO */}
                         <button onClick={() => copiarConviteEvento(ev)} className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded border border-green-200">📋 Convite Zap</button>
                       </div>
                     </div>
@@ -222,12 +233,11 @@ export default function AdminPanel() {
           </div>
         )}
 
-        {/* --- ABA FINANCEIRO --- */}
+        {/* --- ABA FINANCEIRO (COM COLUNA DE REFERÊNCIA) --- */}
         {aba === 'financeiro' && (
           <div className="bg-white p-6 rounded shadow print:hidden">
              <div className="flex justify-between items-center mb-4">
                <h3 className="font-bold text-lg text-gray-800">Mensalidades</h3>
-               {/* GERADOR DE COBRANÇA RESTAURADO */}
                <form onSubmit={criarMensalidadeManual} className="flex gap-2 items-center bg-gray-50 p-2 rounded border">
                  <select className="border rounded p-1 text-sm w-32 text-black" onChange={e => setNovaCobranca({...novaCobranca, aluno_id: e.target.value})}>
                    <option value="">Aluno...</option>
@@ -239,13 +249,24 @@ export default function AdminPanel() {
                </form>
              </div>
              <table className="w-full text-left">
-               <thead className="bg-gray-50 text-gray-600"><tr><th className="p-2">Aluno</th><th>Vencimento</th><th>Valor</th><th>Status</th><th>Avisar</th></tr></thead>
+               <thead className="bg-gray-50 text-gray-600">
+                 <tr>
+                   <th className="p-2">Aluno</th>
+                   <th>Referência</th> {/* COLUNA NOVA AQUI */}
+                   <th>Vencimento</th>
+                   <th>Valor</th>
+                   <th>Status</th>
+                   <th>Avisar</th>
+                 </tr>
+               </thead>
                <tbody>
                  {mensalidades.map(m => (
                    <tr key={m.id} className="border-b text-gray-700">
-                     <td className="p-2">{m.alunos?.nome}</td><td>{m.vencimento}</td><td>R$ {m.valor}</td>
+                     <td className="p-2 font-medium">{m.alunos?.nome}</td>
+                     <td className="text-blue-800 font-bold text-sm">{formatarMesExtenso(m.mes_referencia)}</td> {/* DADO NOVO AQUI */}
+                     <td>{m.vencimento}</td>
+                     <td>R$ {m.valor}</td>
                      <td><button onClick={() => alternarMensalidade(m.id, m.status)} className={`px-2 py-1 rounded text-xs font-bold w-20 ${m.status === 'pago' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{m.status.toUpperCase()}</button></td>
-                     {/* BOTÃO COBRAR ZAP RESTAURADO */}
                      <td>{m.status !== 'pago' && <button onClick={() => enviarCobranca(m)} className="bg-green-500 text-white p-1 rounded hover:bg-green-600 text-xs">📱 Cobrar</button>}</td>
                    </tr>
                  ))}
@@ -254,20 +275,7 @@ export default function AdminPanel() {
           </div>
         )}
 
-        {/* --- ABA EQUIPE --- */}
-        {aba === 'equipe' && (
-          <div className="bg-white p-6 rounded shadow max-w-md mx-auto print:hidden">
-            <h2 className="text-xl font-bold mb-4 text-gray-800">Adicionar Admin</h2>
-            <form onSubmit={criarAdmin} className="space-y-4">
-              <input required placeholder="Nome" className="w-full border p-3 rounded text-black" value={novoAdmin.nome} onChange={e => setNovoAdmin({...novoAdmin, nome: e.target.value})} />
-              <input required type="email" placeholder="E-mail" className="w-full border p-3 rounded text-black" value={novoAdmin.email} onChange={e => setNovoAdmin({...novoAdmin, email: e.target.value})} />
-              <input required type="password" placeholder="Senha" className="w-full border p-3 rounded text-black" value={novoAdmin.senha} onChange={e => setNovoAdmin({...novoAdmin, senha: e.target.value})} />
-              <button className="w-full bg-blue-600 text-white p-3 rounded font-bold">Criar Admin</button>
-            </form>
-          </div>
-        )}
-
-        {/* --- ABA CARTEIRINHAS (MANTIDA) --- */}
+        {/* --- ABA CARTEIRINHAS --- */}
         {aba === 'carteirinhas' && (
           <div>
             <div className="bg-white p-6 rounded shadow mb-8 print:hidden">
@@ -280,7 +288,7 @@ export default function AdminPanel() {
               <button onClick={imprimirCarteirinhas} className="mt-4 bg-blue-600 text-white font-bold py-2 px-6 rounded w-full">🖨️ IMPRIMIR</button>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 print:grid-cols-2 print:w-full place-items-center md:place-items-start">
-              {alunos.map(a => (
+              {alunosFiltrados.map(a => (
                 <div key={a.id} className="relative border border-black overflow-hidden bg-white print:break-inside-avoid shadow-md print:shadow-none" style={{ width: '85mm', height: '54mm', pageBreakInside: 'avoid' }}>
                   {configCarteirinha.fundo ? <img src={configCarteirinha.fundo} className="absolute inset-0 w-full h-full object-cover z-0 opacity-90" /> : <div className="absolute inset-0 bg-gradient-to-r from-green-700 to-green-900 z-0" />}
                   <div className="relative z-10 p-2 h-full flex flex-col justify-between text-white">
@@ -297,9 +305,22 @@ export default function AdminPanel() {
             </div>
           </div>
         )}
+
+        {/* ABA EQUIPE */}
+        {aba === 'equipe' && (
+          <div className="bg-white p-6 rounded shadow max-w-md mx-auto print:hidden">
+            <h2 className="text-xl font-bold mb-4 text-gray-800">Adicionar Admin</h2>
+            <form onSubmit={criarAdmin} className="space-y-4">
+              <input required placeholder="Nome" className="w-full border p-3 rounded text-black" value={novoAdmin.nome} onChange={e => setNovoAdmin({...novoAdmin, nome: e.target.value})} />
+              <input required type="email" placeholder="E-mail" className="w-full border p-3 rounded text-black" value={novoAdmin.email} onChange={e => setNovoAdmin({...novoAdmin, email: e.target.value})} />
+              <input required type="password" placeholder="Senha" className="w-full border p-3 rounded text-black" value={novoAdmin.senha} onChange={e => setNovoAdmin({...novoAdmin, senha: e.target.value})} />
+              <button className="w-full bg-blue-600 text-white p-3 rounded font-bold">Criar Admin</button>
+            </form>
+          </div>
+        )}
       </div>
 
-      {/* MODAL DETALHES ALUNO (EDIÇÃO RESTAURADA) */}
+      {/* MODAL DETALHES ALUNO COM EDIÇÃO */}
       {alunoDetalhe && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 print:hidden">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-lg p-6 relative">
@@ -321,11 +342,7 @@ export default function AdminPanel() {
               <div className="space-y-4">
                 <div className="flex items-center gap-4 mb-4">
                    {alunoDetalhe.foto_url && <img src={alunoDetalhe.foto_url} className="w-20 h-20 rounded-full object-cover border"/>}
-                   <div>
-                     <p className="text-gray-600"><strong>Posição:</strong> {alunoDetalhe.posicao}</p>
-                     <p className="text-gray-600"><strong>Nasc:</strong> {alunoDetalhe.data_nascimento}</p>
-                     <p className="text-gray-600"><strong>Início Pag:</strong> {alunoDetalhe.data_inicio_pagamento || '--'}</p>
-                   </div>
+                   <div><p className="text-gray-600"><strong>Posição:</strong> {alunoDetalhe.posicao}</p><p className="text-gray-600"><strong>Nasc:</strong> {alunoDetalhe.data_nascimento}</p><p className="text-gray-600"><strong>Início Pag:</strong> {alunoDetalhe.data_inicio_pagamento || '--'}</p></div>
                 </div>
                 <div className="bg-gray-50 p-3 rounded text-sm text-gray-500"><p><strong>Resp:</strong> {alunoDetalhe.profiles?.nome_completo}</p><p><strong>Tel:</strong> {alunoDetalhe.profiles?.telefone}</p></div>
                 <button onClick={() => deletarAluno(alunoDetalhe.id)} className="w-full bg-red-100 text-red-700 py-2 rounded font-bold mt-2">🗑️ Excluir Aluno</button>
