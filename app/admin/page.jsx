@@ -26,10 +26,9 @@ export default function AdminPanel() {
   const [editandoAluno, setEditandoAluno] = useState(false)
   const [formEdicao, setFormEdicao] = useState({})
   const [novaFotoAluno, setNovaFotoAluno] = useState(null)
-  
   const [eventoDetalhe, setEventoDetalhe] = useState(null) 
   
-  // Forms
+  // Forms Criação
   const [novoEvento, setNovoEvento] = useState({ titulo: '', data: '', local: '', descricao: '', valor: '' })
   const [arquivoEvento, setArquivoEvento] = useState(null)
   const [novoAdmin, setNovoAdmin] = useState({ nome: '', email: '', senha: '' })
@@ -69,7 +68,7 @@ export default function AdminPanel() {
 
   const handleLogout = async () => { await supabase.auth.signOut(); router.push('/') }
 
-  // Funções Auxiliares
+  // --- FUNÇÕES AUXILIARES ---
   function formatarMesExtenso(dataString) {
     if (!dataString) return '--'
     const data = new Date(dataString)
@@ -90,8 +89,7 @@ export default function AdminPanel() {
   }
 
   function copiarConviteEvento(ev) {
-    const data = new Date(ev.data_hora).toLocaleString()
-    const msg = `🏆 *${ev.titulo}* 🏆\n📅 Data: ${data}\n📍 Local: ${ev.local}\n💰 Valor: ${ev.valor > 0 ? 'R$ '+ev.valor : 'Grátis'}\n\n📝 Inscrições abertas no App!`
+    const msg = `🏆 *${ev.titulo}* 🏆\n📅 Data: ${new Date(ev.data_hora).toLocaleString()}\n📍 Local: ${ev.local}\n📝 Inscrições no App!`
     navigator.clipboard.writeText(msg)
     alert('Convite copiado!')
   }
@@ -100,7 +98,7 @@ export default function AdminPanel() {
   function handleLogoCarteirinha(e) { if (e.target.files[0]) setConfigCarteirinha({ ...configCarteirinha, logo: URL.createObjectURL(e.target.files[0]) }) }
   function imprimirCarteirinhas() { window.print() }
 
-  // Ações CRUD
+  // --- CRUD ---
   async function criarEvento(e) {
     e.preventDefault(); let u = null
     if (arquivoEvento) {
@@ -112,27 +110,35 @@ export default function AdminPanel() {
   }
 
   async function deletarEvento(id) { if(confirm('Apagar?')) { await supabase.from('inscricoes').delete().eq('evento_id', id); await supabase.from('eventos').delete().eq('id', id); carregarTudo() } }
+  
   async function removerInscricaoDoEvento(id) { if(confirm('Remover aluno?')) { await supabase.from('inscricoes').delete().eq('id', id); carregarTudo() } }
+  
   async function alternarPagamentoInscricao(id, status) { await supabase.from('inscricoes').update({ pago: !status }).eq('id', id); carregarTudo() }
+
   async function criarAdmin(e) {
     e.preventDefault(); const { data, error } = await supabase.auth.signUp({ email: novoAdmin.email, password: novoAdmin.senha, options: { data: { full_name: novoAdmin.nome } } })
     if (error) alert(error.message); else { setTimeout(async()=>{await supabase.from('profiles').update({is_admin:true}).eq('id',data.user.id);alert('Admin criado!')},1500) }
   }
+
   async function criarMensalidadeManual(e) {
     e.preventDefault()
-    if(!novaCobranca.aluno_id || !novaCobranca.mes) return alert('Preencha tudo')
+    if(!novaCobranca.aluno_id) return
     await supabase.from('mensalidades').insert({ aluno_id: novaCobranca.aluno_id, mes_referencia: novaCobranca.mes+'-01', valor: novaCobranca.valor, vencimento: novaCobranca.mes+'-10', status: 'pendente' })
-    carregarTudo(); alert('Cobrança gerada!')
+    carregarTudo(); alert('Gerada!')
   }
-  async function alternarMensalidade(id, s) { await supabase.from('mensalidades').update({status: s==='pago'?'pendente':'pago'}).eq('id',id); carregarTudo() }
+
+  // Edição Aluno
   function abrirDetalhes(aluno) { setAlunoDetalhe(aluno); setEditandoAluno(false); setFormEdicao({ nome: aluno.nome, posicao: aluno.posicao, data_nascimento: aluno.data_nascimento, endereco: aluno.endereco, data_inicio_pagamento: aluno.data_inicio_pagamento }) }
+  
   async function salvarEdicaoAluno() {
     let u = alunoDetalhe.foto_url
     if(novaFotoAluno) { const n=`foto-${Date.now()}`; await supabase.storage.from('fotos-alunos').upload(n, novaFotoAluno); u=supabase.storage.from('fotos-alunos').getPublicUrl(n).data.publicUrl }
     await supabase.from('alunos').update({...formEdicao, foto_url:u}).eq('id', alunoDetalhe.id)
     alert('Salvo!'); setEditandoAluno(false); carregarTudo(); setAlunoDetalhe({...alunoDetalhe, ...formEdicao, foto_url:u})
   }
+  
   async function deletarAluno(id) { if(confirm('Apagar tudo?')) { await supabase.from('inscricoes').delete().eq('aluno_id', id); await supabase.from('mensalidades').delete().eq('aluno_id', id); await supabase.from('alunos').delete().eq('id', id); setAlunoDetalhe(null); carregarTudo() } }
+  async function alternarMensalidade(id, s) { await supabase.from('mensalidades').update({status: s==='pago'?'pendente':'pago'}).eq('id',id); carregarTudo() }
 
   const alunosFiltrados = alunos.filter(a => a.nome?.toLowerCase().includes(busca.toLowerCase()) || a.profiles?.nome_completo?.toLowerCase().includes(busca.toLowerCase()))
 
@@ -142,9 +148,10 @@ export default function AdminPanel() {
     <div className="min-h-screen bg-gray-100 p-4 md:p-6 font-sans print:bg-white print:p-0">
       <div className="max-w-7xl mx-auto">
         
-        {/* HEADER RESPONSIVO */}
+        {/* HEADER COM LOGO */}
         <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4 bg-white p-4 rounded shadow-sm print:hidden">
           <div className="flex items-center gap-4 w-full md:w-auto justify-center md:justify-start">
+             {/* LOGO AQUI */}
              <img src="/logo.png" alt="Admin" className="h-12 w-auto object-contain" onError={(e) => e.target.style.display='none'} />
              <div className="text-center md:text-left">
                <h1 className="text-2xl font-bold text-gray-800">Painel Admin</h1>
@@ -157,14 +164,16 @@ export default function AdminPanel() {
           </div>
         </div>
 
-        {/* MENU RESPONSIVO (SCROLL) */}
+        {/* MENU */}
         <div className="flex gap-2 mb-6 border-b pb-2 overflow-x-auto print:hidden">
           {['alunos', 'eventos', 'financeiro', 'equipe', 'carteirinhas'].map(n => (
             <button key={n} onClick={() => setAba(n)} className={`px-4 py-2 rounded-t-lg font-bold capitalize whitespace-nowrap ${aba === n ? 'bg-white text-green-700 border-t border-l border-r' : 'bg-gray-200 text-gray-500'}`}>{n}</button>
           ))}
         </div>
 
-        {/* --- ABA ALUNOS --- */}
+        {/* --- CONTEÚDO DAS ABAS --- */}
+        
+        {/* ALUNOS */}
         {aba === 'alunos' && (
           <div className="bg-white p-4 md:p-6 rounded shadow-sm print:hidden">
             <h2 className="text-xl font-bold text-gray-800 mb-4">Gerenciar Alunos ({alunosFiltrados.length})</h2>
@@ -186,7 +195,7 @@ export default function AdminPanel() {
           </div>
         )}
 
-        {/* --- ABA EVENTOS --- */}
+        {/* EVENTOS */}
         {aba === 'eventos' && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 print:hidden">
             <div className="bg-white p-4 md:p-6 rounded shadow h-fit">
@@ -203,24 +212,27 @@ export default function AdminPanel() {
             </div>
             <div className="md:col-span-2 bg-white p-4 md:p-6 rounded shadow">
               <h3 className="font-bold text-lg mb-4 text-gray-800">Eventos Ativos</h3>
-              {eventos.map(ev => (
-                <div key={ev.id} className="border-b py-3 flex flex-col md:flex-row justify-between items-start md:items-center gap-2">
-                  <div className="flex-1">
-                    <p className="font-bold text-gray-800">{ev.titulo}</p>
-                    <p className="text-sm text-gray-500">{new Date(ev.data_hora).toLocaleString()} • {ev.valor > 0 ? `R$ ${ev.valor}` : 'Grátis'}</p>
-                    <div className="flex gap-2 mt-2">
-                      <button onClick={() => setEventoDetalhe(ev)} className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">👥 Ver Inscritos</button>
-                      <button onClick={() => copiarConviteEvento(ev)} className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded border border-green-200">📋 Convite Zap</button>
+              {eventos.map(ev => {
+                const qtd = inscricoes.filter(i => i.evento_id === ev.id).length
+                return (
+                  <div key={ev.id} className="border-b py-3 flex flex-col md:flex-row justify-between items-start md:items-center gap-2">
+                    <div className="flex-1">
+                      <p className="font-bold text-gray-800">{ev.titulo}</p>
+                      <p className="text-sm text-gray-500">{new Date(ev.data_hora).toLocaleString()} • {ev.valor > 0 ? `R$ ${ev.valor}` : 'Grátis'}</p>
+                      <div className="flex gap-2 mt-2">
+                        <button onClick={() => setEventoDetalhe(ev)} className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded hover:bg-blue-200">👥 Ver {qtd} Inscritos</button>
+                        <button onClick={() => copiarConviteEvento(ev)} className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded border border-green-200">📋 Convite Zap</button>
+                      </div>
                     </div>
+                    <button onClick={() => deletarEvento(ev.id)} className="text-red-500 border border-red-200 px-3 py-1 rounded text-sm w-full md:w-auto">Excluir</button>
                   </div>
-                  <button onClick={() => deletarEvento(ev.id)} className="text-red-500 border border-red-200 px-3 py-1 rounded text-sm w-full md:w-auto">Excluir</button>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </div>
         )}
 
-        {/* --- ABA FINANCEIRO (COM SCROLL LATERAL) --- */}
+        {/* FINANCEIRO */}
         {aba === 'financeiro' && (
           <div className="bg-white p-4 md:p-6 rounded shadow print:hidden">
              <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-3">
@@ -235,7 +247,6 @@ export default function AdminPanel() {
                  <button type="submit" className="bg-black text-white px-2 py-1 rounded text-xs">Gerar</button>
                </form>
              </div>
-             {/* AQUI ESTÁ O FIX DE TABELA RESPONSIVA */}
              <div className="overflow-x-auto">
                <table className="w-full text-left min-w-[600px]">
                  <thead className="bg-gray-50 text-gray-600"><tr><th className="p-2">Aluno</th><th>Referência</th><th>Vencimento</th><th>Valor</th><th>Status</th><th>Avisar</th></tr></thead>
@@ -256,7 +267,7 @@ export default function AdminPanel() {
           </div>
         )}
 
-        {/* ABA CARTEIRINHAS (GRID RESPONSIVO) */}
+        {/* CARTEIRINHAS */}
         {aba === 'carteirinhas' && (
           <div>
             <div className="bg-white p-4 md:p-6 rounded shadow mb-8 print:hidden">
@@ -326,7 +337,7 @@ export default function AdminPanel() {
                    <div>
                      <p className="text-gray-600"><strong>Posição:</strong> {alunoDetalhe.posicao}</p>
                      <p className="text-gray-600"><strong>Nasc:</strong> {alunoDetalhe.data_nascimento}</p>
-                     <p className="text-gray-600"><strong>Início Pag:</strong> {alunoDetalhe.data_inicio_pagamento}</p>
+                     <p className="text-gray-600"><strong>Início Pag:</strong> {alunoDetalhe.data_inicio_pagamento || '--'}</p>
                    </div>
                 </div>
                 <div className="bg-gray-50 p-3 rounded text-sm text-gray-500"><p><strong>Resp:</strong> {alunoDetalhe.profiles?.nome_completo}</p><p><strong>Tel:</strong> {alunoDetalhe.profiles?.telefone}</p><p className="break-words"><strong>Endereço:</strong> {alunoDetalhe.endereco}</p></div>
@@ -358,6 +369,11 @@ export default function AdminPanel() {
           </div>
         </div>
       )}
+
+      {/* RODAPÉ DO ADMIN */}
+      <div className="mt-8 text-center text-xs text-gray-400 print:hidden">
+        <p>Sistema Escolinha SDC - PIX: 00.000.000/0001-00</p>
+      </div>
     </div>
   )
 }

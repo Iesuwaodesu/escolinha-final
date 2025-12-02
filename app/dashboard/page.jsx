@@ -145,9 +145,9 @@ export default function Dashboard() {
         <div className="mt-12 border-t pt-6 text-center">
           <p className="text-green-800 font-bold text-sm mb-2">DÚVIDAS OU PAGAMENTOS?</p>
           <div className="bg-white inline-block px-6 py-4 rounded-lg shadow-sm border text-left space-y-1">
-            <p className="text-xs text-gray-500">📞 <span className="text-black font-bold">(27) 99999-9999</span></p>
-            <p className="text-xs text-gray-500">📧 <span className="text-black font-bold">contato@sdcguarapari.com.br</span></p>
-            <div className="pt-2 border-t mt-2"><span className="text-[10px] font-bold text-gray-400 block">CHAVE PIX CNPJ:</span><span className="font-mono text-black font-bold text-sm select-all">00.000.000/0001-00</span></div>
+            <p className="text-xs text-gray-500">📞 <span className="text-black font-bold">(27) 98116-2741 - Job Vassoler</span></p>
+            <p className="text-xs text-gray-500">📧 <span className="text-black font-bold">escolinhadefutebolsdcgua@gmail.com</span></p>
+            <div className="pt-2 border-t mt-2"><span className="text-[10px] font-bold text-gray-400 block">CHAVE PIX CNPJ:</span><span className="font-mono text-black font-bold text-sm select-all">14.910.051/0001-65</span></div>
           </div>
         </div>
       </div>
