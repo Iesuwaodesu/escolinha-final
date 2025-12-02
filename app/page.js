@@ -116,7 +116,7 @@ export default function LoginPage() {
         
         {/* --- EDITE SEU TELEFONE AQUI --- */}
         <p className="text-gray-600 text-sm">
-           (27) 99999-9999 | contato@sdcguarapari.com.br
+           (27) 98116-2741 | escolinhadefutebolsdcgua@gmail.com.br
         </p>
 
         <div className="bg-white px-4 py-2 rounded-full shadow-sm inline-block mt-2">
@@ -124,7 +124,7 @@ export default function LoginPage() {
           
           {/* --- EDITE SEU PIX AQUI --- */}
           <span className="font-mono text-black font-bold select-all">
-             00.000.000/0001-00
+             14.910.051/0001-65
           </span>
         </div>
       </div>

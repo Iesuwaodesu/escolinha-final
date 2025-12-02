@@ -372,7 +372,7 @@ export default function AdminPanel() {
 
       {/* RODAPÉ DO ADMIN */}
       <div className="mt-8 text-center text-xs text-gray-400 print:hidden">
-        <p>Sistema Escolinha SDC - PIX: 00.000.000/0001-00</p>
+        <p>Sistema Escolinha SDC - PIX: 14.910.051/0001-65</p>
       </div>
     </div>
   )
