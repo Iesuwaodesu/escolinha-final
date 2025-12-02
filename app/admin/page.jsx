@@ -37,7 +37,8 @@ export default function AdminPanel() {
   const [configCarteirinha, setConfigCarteirinha] = useState({
     titulo: 'CAMPEONATO OFICIAL SDC',
     equipe: 'SDC GUARAPARI',
-    fundo: null // URL da imagem de fundo
+    fundo: null, // URL da imagem de fundo
+    logo: null   // URL da imagem do logo (NOVO)
   })
 
   useEffect(() => { checkAdmin() }, [])
@@ -69,9 +70,16 @@ export default function AdminPanel() {
   // --- FUNÇÕES DA CARTEIRINHA ---
   function handleFundoCarteirinha(e) {
     if (e.target.files && e.target.files[0]) {
-      // Cria uma URL temporária para ver a imagem na hora sem precisar subir no banco
       const url = URL.createObjectURL(e.target.files[0])
       setConfigCarteirinha({ ...configCarteirinha, fundo: url })
+    }
+  }
+  
+  // Função nova para o Logo
+  function handleLogoCarteirinha(e) {
+    if (e.target.files && e.target.files[0]) {
+      const url = URL.createObjectURL(e.target.files[0])
+      setConfigCarteirinha({ ...configCarteirinha, logo: url })
     }
   }
 
@@ -159,8 +167,8 @@ export default function AdminPanel() {
             {/* CONFIGURAÇÃO (Esconde na impressão) */}
             <div className="bg-white p-6 rounded shadow mb-8 print:hidden">
               <h2 className="text-xl font-bold text-gray-800 mb-4">Configurar Carteirinhas</h2>
-              <div className="grid md:grid-cols-4 gap-4 items-end">
-                <div>
+              <div className="grid md:grid-cols-5 gap-4 items-end">
+                <div className="md:col-span-2">
                   <label className="text-xs font-bold text-gray-500">Título do Evento</label>
                   <input className="w-full border p-2 rounded text-black" value={configCarteirinha.titulo} onChange={e => setConfigCarteirinha({...configCarteirinha, titulo: e.target.value})} />
                 </div>
@@ -172,7 +180,13 @@ export default function AdminPanel() {
                   <label className="text-xs font-bold text-gray-500">Imagem de Fundo</label>
                   <input type="file" className="w-full text-xs" onChange={handleFundoCarteirinha} />
                 </div>
-                <button onClick={imprimirCarteirinhas} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded flex items-center justify-center gap-2">
+                <div>
+                  <label className="text-xs font-bold text-gray-500">Logo do Campeonato</label>
+                  <input type="file" className="w-full text-xs" onChange={handleLogoCarteirinha} />
+                </div>
+              </div>
+              <div className="mt-4 flex justify-end">
+                 <button onClick={imprimirCarteirinhas} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded flex items-center justify-center gap-2">
                   🖨️ IMPRIMIR TODOS
                 </button>
               </div>
@@ -180,53 +194,66 @@ export default function AdminPanel() {
             </div>
 
             {/* ÁREA DE VISUALIZAÇÃO / IMPRESSÃO */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 print:grid-cols-2 print:gap-2 print:w-full">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 print:grid-cols-2 print:gap-2 print:w-full place-items-center md:place-items-start">
               {alunosFiltrados.map(a => (
-                <div key={a.id} className="relative border border-black overflow-hidden bg-white print:break-inside-avoid" style={{ width: '85mm', height: '54mm', pageBreakInside: 'avoid' }}>
+                <div key={a.id} className="relative border border-black overflow-hidden bg-white print:break-inside-avoid shadow-md print:shadow-none" style={{ width: '85mm', height: '54mm', pageBreakInside: 'avoid' }}>
                   
                   {/* Fundo */}
                   {configCarteirinha.fundo ? (
                     <img src={configCarteirinha.fundo} className="absolute inset-0 w-full h-full object-cover z-0 opacity-90" />
                   ) : (
-                    <div className="absolute inset-0 bg-gradient-to-r from-green-600 to-green-800 z-0" />
+                    <div className="absolute inset-0 bg-gradient-to-r from-green-700 to-green-900 z-0" />
                   )}
 
                   {/* Conteúdo */}
                   <div className="relative z-10 p-2 h-full flex flex-col justify-between text-white">
                     {/* Topo */}
                     <div className="text-center border-b border-white/30 pb-1">
-                      <h3 className="font-bold text-[10px] tracking-widest uppercase">{configCarteirinha.titulo}</h3>
+                      <h3 className="font-bold text-[10px] tracking-widest uppercase truncate">{configCarteirinha.titulo}</h3>
                     </div>
 
-                    {/* Centro */}
-                    <div className="flex items-center gap-3">
-                      <div className="w-[22mm] h-[28mm] bg-white border-2 border-white overflow-hidden shadow-sm flex-shrink-0">
+                    {/* Centro (Foto + Dados + Logo) */}
+                    <div className="flex items-center justify-between gap-2 h-[30mm]">
+                      
+                      {/* FOTO (Esquerda) */}
+                      <div className="w-[22mm] h-[28mm] bg-white border-2 border-white overflow-hidden shadow-sm flex-shrink-0 relative">
                         {a.foto_url ? (
                           <img src={a.foto_url} className="w-full h-full object-cover" />
                         ) : (
-                          <div className="w-full h-full bg-gray-300 flex items-center justify-center text-gray-500 text-xs">FOTO</div>
+                          <div className="w-full h-full bg-gray-300 flex items-center justify-center text-gray-500 text-[8px] font-bold">FOTO</div>
                         )}
                       </div>
-                      <div className="flex-1">
-                        <p className="text-[8px] uppercase text-green-100">Nome do Atleta</p>
-                        <p className="font-bold text-sm leading-tight mb-1">{a.nome}</p>
+
+                      {/* DADOS (Meio) */}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[7px] uppercase text-green-200">Nome do Atleta</p>
+                        <p className="font-bold text-xs leading-tight mb-1 truncate">{a.nome}</p>
                         
-                        <div className="flex gap-4">
+                        <div className="flex gap-2">
                           <div>
-                            <p className="text-[8px] uppercase text-green-100">Nasc.</p>
-                            <p className="font-bold text-xs">{a.data_nascimento ? a.data_nascimento.split('-')[0] : '--'}</p>
+                            <p className="text-[7px] uppercase text-green-200">Nasc.</p>
+                            <p className="font-bold text-[10px]">{a.data_nascimento ? a.data_nascimento.split('-')[0] : '--'}</p>
                           </div>
                           <div>
-                            <p className="text-[8px] uppercase text-green-100">Posição</p>
-                            <p className="font-bold text-xs">{a.posicao || 'JOGADOR'}</p>
+                            <p className="text-[7px] uppercase text-green-200">Posição</p>
+                            <p className="font-bold text-[10px] truncate">{a.posicao || 'JOGADOR'}</p>
                           </div>
                         </div>
+                      </div>
+
+                      {/* LOGO (Direita) */}
+                      <div className="w-[22mm] h-[22mm] bg-white/10 border border-white/20 flex items-center justify-center overflow-hidden rounded-sm flex-shrink-0">
+                         {configCarteirinha.logo ? (
+                           <img src={configCarteirinha.logo} className="w-full h-full object-contain p-1" />
+                         ) : (
+                           <span className="text-[7px] text-green-200 uppercase text-center font-bold leading-none">LOGO<br/>EVENTO</span>
+                         )}
                       </div>
                     </div>
 
                     {/* Rodapé */}
-                    <div className="bg-black/40 -mx-2 -mb-2 p-1 text-center">
-                      <p className="text-[9px] font-bold tracking-widest text-yellow-400 uppercase">{configCarteirinha.equipe}</p>
+                    <div className="bg-black/40 -mx-2 -mb-2 p-1 text-center relative bottom-0">
+                      <p className="text-[8px] font-bold tracking-widest text-yellow-400 uppercase truncate">{configCarteirinha.equipe}</p>
                     </div>
                   </div>
                 </div>
@@ -357,12 +384,17 @@ export default function AdminPanel() {
               </div>
             ) : (
               <div className="space-y-4">
-                <p className="text-gray-600"><strong>Posição:</strong> {alunoDetalhe.posicao}</p>
-                <p className="text-gray-600"><strong>Nasc:</strong> {alunoDetalhe.data_nascimento}</p>
-                <p className="text-gray-600"><strong>Início Pag:</strong> {alunoDetalhe.data_inicio_pagamento}</p>
-                <p className="text-gray-600"><strong>Endereço:</strong> {alunoDetalhe.endereco}</p>
+                <div className="flex items-center gap-4 mb-4">
+                   {alunoDetalhe.foto_url && <img src={alunoDetalhe.foto_url} className="w-20 h-20 rounded-full object-cover border"/>}
+                   <div>
+                     <p className="text-gray-600"><strong>Posição:</strong> {alunoDetalhe.posicao}</p>
+                     <p className="text-gray-600"><strong>Nasc:</strong> {alunoDetalhe.data_nascimento}</p>
+                     <p className="text-gray-600"><strong>Início Pag:</strong> {alunoDetalhe.data_inicio_pagamento}</p>
+                     <p className="text-gray-600"><strong>Endereço:</strong> {alunoDetalhe.endereco}</p>
+                   </div>
+                </div>
                 <div className="bg-gray-50 p-3 rounded text-sm text-gray-500"><p><strong>Resp:</strong> {alunoDetalhe.profiles?.nome_completo}</p><p><strong>Tel:</strong> {alunoDetalhe.profiles?.telefone}</p></div>
-                <button onClick={() => deletarAluno(alunoDetalhe.id)} className="w-full bg-red-100 text-red-700 py-2 rounded font-bold mt-2">🗑️ Excluir</button>
+                <button onClick={() => deletarAluno(alunoDetalhe.id)} className="w-full bg-red-100 text-red-700 py-2 rounded font-bold mt-2">🗑️ Excluir Aluno</button>
               </div>
             )}
           </div>
