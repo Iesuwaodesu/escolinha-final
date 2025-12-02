@@ -13,6 +13,7 @@ export default function AdminPanel() {
   const [loading, setLoading] = useState(true)
   const [aba, setAba] = useState('alunos') 
   const [busca, setBusca] = useState('')
+  const [userProfile, setUserProfile] = useState(null) // Para debug
 
   // Dados
   const [alunos, setAlunos] = useState([])
@@ -22,7 +23,7 @@ export default function AdminPanel() {
   
   // Detalhes
   const [alunoDetalhe, setAlunoDetalhe] = useState(null)
-  const [eventoDetalhe, setEventoDetalhe] = useState(null) // Para ver inscritos
+  const [eventoDetalhe, setEventoDetalhe] = useState(null) 
   
   // Forms
   const [novoEvento, setNovoEvento] = useState({ titulo: '', data: '', local: '', descricao: '', valor: '' })
@@ -36,10 +37,12 @@ export default function AdminPanel() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return router.push('/')
     
-    const { data: profile } = await supabase.from('profiles').select('is_admin').eq('id', user.id).single()
+    // Busca perfil para confirmar
+    const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).single()
+    setUserProfile(profile) // Guarda para mostrar na tela se deu erro
     
     if (!profile?.is_admin) {
-      alert('Acesso restrito.')
+      alert('Seu usuário NÃO consta como Admin no banco de dados. Verifique a tabela profiles.')
       router.push('/dashboard')
     } else {
       carregarTudo()
@@ -50,17 +53,18 @@ export default function AdminPanel() {
     setLoading(true)
     
     // 1. Alunos
-    const { data: a } = await supabase
+    const { data: a, error: erroA } = await supabase
       .from('alunos')
       .select('*, profiles(nome_completo, email, telefone)')
       .order('nome')
+    if (erroA) console.log("Erro Alunos:", erroA)
     setAlunos(a || [])
 
     // 2. Eventos
     const { data: e } = await supabase.from('eventos').select('*').order('data_hora')
     setEventos(e || [])
 
-    // 3. Inscrições (JOIN com alunos para ver nomes)
+    // 3. Inscrições
     const { data: i } = await supabase
       .from('inscricoes')
       .select('*, alunos(nome, data_nascimento), profiles:alunos(responsavel_id)')
@@ -73,14 +77,19 @@ export default function AdminPanel() {
     setLoading(false)
   }
 
-  // --- FILTROS ---
+  const handleLogout = async () => {
+    await supabase.auth.signOut()
+    router.push('/')
+  }
+
+  // Filtros
   const alunosFiltrados = alunos.filter(a => 
     a.nome?.toLowerCase().includes(busca.toLowerCase()) || 
     a.profiles?.nome_completo?.toLowerCase().includes(busca.toLowerCase()) ||
     a.endereco?.toLowerCase().includes(busca.toLowerCase())
   )
 
-  // --- AÇÕES EVENTOS ---
+  // Ações
   async function criarEvento(e) {
     e.preventDefault()
     const { error } = await supabase.from('eventos').insert({
@@ -90,8 +99,7 @@ export default function AdminPanel() {
       descricao: novoEvento.descricao,
       valor: Number(novoEvento.valor)
     })
-    
-    if (error) alert('Erro: ' + error.message)
+    if (error) alert(error.message)
     else {
       alert('Evento criado!')
       setNovoEvento({ titulo: '', data: '', local: '', descricao: '', valor: '' })
@@ -100,21 +108,12 @@ export default function AdminPanel() {
   }
 
   async function deletarEvento(id) {
-    if(!confirm('Deletar evento e TODAS as inscrições?')) return;
+    if(!confirm('Deletar evento?')) return;
     await supabase.from('inscricoes').delete().eq('evento_id', id)
     await supabase.from('eventos').delete().eq('id', id)
     carregarTudo()
   }
 
-  async function removerInscrito(idInscricao) {
-    if(!confirm('Remover este aluno do evento?')) return;
-    await supabase.from('inscricoes').delete().eq('id', idInscricao)
-    // Atualiza a lista localmente para não precisar recarregar tudo
-    setInscricoes(prev => prev.filter(i => i.id !== idInscricao))
-    alert('Inscrição removida.')
-  }
-
-  // --- AÇÕES EQUIPE (CRIAR ADMIN) ---
   async function criarAdmin(e) {
     e.preventDefault()
     const { data, error } = await supabase.auth.signUp({
@@ -122,20 +121,16 @@ export default function AdminPanel() {
       password: novoAdmin.senha,
       options: { data: { full_name: novoAdmin.nome } }
     })
-
-    if (error) return alert('Erro: ' + error.message)
-
-    // Aguarda um pouco e força ser Admin
+    if (error) return alert(error.message)
     setTimeout(async () => {
       await supabase.from('profiles').update({ is_admin: true }).eq('id', data.user.id)
-      alert('Administrador criado com sucesso!')
+      alert('Admin criado!')
       setNovoAdmin({ nome: '', email: '', senha: '' })
     }, 1500)
   }
 
-  // --- AÇÕES ALUNOS ---
   async function deletarAluno(id) {
-    if(!confirm('Apagar aluno e histórico?')) return;
+    if(!confirm('Apagar aluno permanentemente?')) return;
     await supabase.from('inscricoes').delete().eq('aluno_id', id)
     await supabase.from('mensalidades').delete().eq('aluno_id', id)
     await supabase.from('alunos').delete().eq('id', id)
@@ -149,20 +144,31 @@ export default function AdminPanel() {
     <div className="min-h-screen bg-gray-100 p-6 font-sans">
       <div className="max-w-7xl mx-auto">
         
-        <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
-          <h1 className="text-3xl font-bold text-gray-800">Painel Admin</h1>
-          <div className="flex gap-4 items-center">
+        {/* HEADER COM BOTÃO SAIR */}
+        <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4 bg-white p-4 rounded shadow-sm">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-800">Painel Admin</h1>
+            {/* DEBUG: ISSO VAI TE AJUDAR A SABER SEU STATUS */}
+            <p className="text-xs text-gray-400">
+              Logado como: {userProfile?.email} | Status Admin: {userProfile?.is_admin ? '✅ SIM' : '❌ NÃO'}
+            </p>
+          </div>
+          
+          <div className="flex gap-3 items-center w-full md:w-auto">
             <input 
                placeholder="🔍 Buscar..." 
-               className="p-2 border rounded w-64 text-black"
+               className="p-2 border rounded w-full md:w-64 text-black text-sm"
                value={busca}
                onChange={e => setBusca(e.target.value)}
             />
-            <button onClick={() => router.push('/dashboard')} className="text-blue-600 underline text-sm">Voltar ao App</button>
+            <button onClick={() => router.push('/dashboard')} className="text-blue-600 underline text-sm whitespace-nowrap">Ir p/ App</button>
+            <button onClick={handleLogout} className="bg-red-600 text-white px-4 py-2 rounded text-sm font-bold hover:bg-red-700">
+              SAIR
+            </button>
           </div>
         </div>
 
-        {/* Menu Superior */}
+        {/* MENUS */}
         <div className="flex gap-2 mb-6 border-b pb-2 overflow-x-auto">
           {['alunos', 'eventos', 'financeiro', 'equipe'].map(nome => (
             <button key={nome} onClick={() => setAba(nome)} 
@@ -172,10 +178,11 @@ export default function AdminPanel() {
           ))}
         </div>
 
-        {/* --- ABA ALUNOS --- */}
+        {/* ABA ALUNOS */}
         {aba === 'alunos' && (
           <div className="bg-white p-6 rounded shadow-sm">
             <h2 className="text-xl font-bold text-gray-800 mb-4">Gerenciar Alunos ({alunosFiltrados.length})</h2>
+            {alunosFiltrados.length === 0 && <p className="text-gray-500 italic">Nenhum aluno encontrado (verifique se você é Admin no banco).</p>}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {alunosFiltrados.map(a => (
                 <div key={a.id} onClick={() => setAlunoDetalhe(a)} className="border p-4 rounded hover:bg-gray-50 cursor-pointer flex gap-3 items-center">
@@ -190,7 +197,7 @@ export default function AdminPanel() {
           </div>
         )}
 
-        {/* --- ABA EVENTOS --- */}
+        {/* ABA EVENTOS */}
         {aba === 'eventos' && (
           <div className="grid md:grid-cols-3 gap-6">
             <div className="bg-white p-6 rounded shadow h-fit">
@@ -200,11 +207,9 @@ export default function AdminPanel() {
                 <input required type="datetime-local" className="w-full border p-2 rounded text-black" value={novoEvento.data} onChange={e => setNovoEvento({...novoEvento, data: e.target.value})} />
                 <input required placeholder="Local" className="w-full border p-2 rounded text-black" value={novoEvento.local} onChange={e => setNovoEvento({...novoEvento, local: e.target.value})} />
                 <input type="number" placeholder="Valor (R$)" className="w-full border p-2 rounded text-black" value={novoEvento.valor} onChange={e => setNovoEvento({...novoEvento, valor: e.target.value})} />
-                <textarea placeholder="Descrição" className="w-full border p-2 rounded text-black" value={novoEvento.descricao} onChange={e => setNovoEvento({...novoEvento, descricao: e.target.value})} />
-                <button className="w-full bg-green-600 text-white font-bold p-2 rounded hover:bg-green-700">Criar</button>
+                <button className="w-full bg-green-600 text-white font-bold p-2 rounded">Criar</button>
               </form>
             </div>
-
             <div className="md:col-span-2 bg-white p-6 rounded shadow">
               <h3 className="font-bold text-lg mb-4 text-gray-800">Eventos Ativos</h3>
               {eventos.map(ev => {
@@ -213,15 +218,12 @@ export default function AdminPanel() {
                   <div key={ev.id} className="border-b py-3 flex justify-between items-center">
                     <div>
                       <p className="font-bold text-gray-800">{ev.titulo}</p>
-                      <p className="text-sm text-gray-500">{new Date(ev.data_hora).toLocaleString()} • R$ {ev.valor}</p>
-                      <button 
-                        onClick={() => setEventoDetalhe(ev)}
-                        className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded mt-1 hover:bg-blue-200"
-                      >
+                      <p className="text-sm text-gray-500">{new Date(ev.data_hora).toLocaleString()} • {ev.valor > 0 ? `R$ ${ev.valor}` : 'Grátis'}</p>
+                      <button onClick={() => setEventoDetalhe(ev)} className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded mt-1">
                         👥 Ver {qtd} Inscritos
                       </button>
                     </div>
-                    <button onClick={() => deletarEvento(ev.id)} className="text-red-500 border border-red-200 px-3 py-1 rounded text-sm hover:bg-red-50">Excluir Evento</button>
+                    <button onClick={() => deletarEvento(ev.id)} className="text-red-500 border border-red-200 px-3 py-1 rounded text-sm">Excluir</button>
                   </div>
                 )
               })}
@@ -229,10 +231,11 @@ export default function AdminPanel() {
           </div>
         )}
 
-        {/* --- ABA FINANCEIRO --- */}
+        {/* ABA FINANCEIRO */}
         {aba === 'financeiro' && (
           <div className="bg-white p-6 rounded shadow">
              <h3 className="font-bold text-lg mb-4 text-gray-800">Mensalidades</h3>
+             {mensalidades.length === 0 && <p className="text-gray-500">Nenhuma mensalidade gerada.</p>}
              <table className="w-full text-left">
                <thead className="bg-gray-50 text-gray-600"><tr><th className="p-2">Aluno</th><th>Vencimento</th><th>Valor</th><th>Status</th></tr></thead>
                <tbody>
@@ -247,64 +250,51 @@ export default function AdminPanel() {
           </div>
         )}
 
-        {/* --- ABA EQUIPE (CRIAR ADMIN) --- */}
+        {/* ABA EQUIPE */}
         {aba === 'equipe' && (
           <div className="max-w-md mx-auto bg-white p-8 rounded shadow border-l-4 border-blue-600">
             <h2 className="text-2xl font-bold mb-4 text-gray-800">Cadastrar Novo Admin</h2>
-            <p className="text-sm text-gray-500 mb-4">Este usuário terá acesso total ao painel e não precisará cadastrar alunos.</p>
             <form onSubmit={criarAdmin} className="space-y-4">
               <input required placeholder="Nome do Admin" className="w-full border p-3 rounded text-black" value={novoAdmin.nome} onChange={e => setNovoAdmin({...novoAdmin, nome: e.target.value})} />
-              <input required type="email" placeholder="E-mail de Acesso" className="w-full border p-3 rounded text-black" value={novoAdmin.email} onChange={e => setNovoAdmin({...novoAdmin, email: e.target.value})} />
-              <input required type="password" placeholder="Senha Forte" className="w-full border p-3 rounded text-black" value={novoAdmin.senha} onChange={e => setNovoAdmin({...novoAdmin, senha: e.target.value})} />
-              <button type="submit" className="w-full bg-blue-600 text-white p-3 rounded font-bold hover:bg-blue-700">Criar Admin</button>
+              <input required type="email" placeholder="E-mail" className="w-full border p-3 rounded text-black" value={novoAdmin.email} onChange={e => setNovoAdmin({...novoAdmin, email: e.target.value})} />
+              <input required type="password" placeholder="Senha" className="w-full border p-3 rounded text-black" value={novoAdmin.senha} onChange={e => setNovoAdmin({...novoAdmin, senha: e.target.value})} />
+              <button type="submit" className="w-full bg-blue-600 text-white p-3 rounded font-bold">Criar Admin</button>
             </form>
           </div>
         )}
 
       </div>
 
-      {/* MODAL DETALHES ALUNO */}
+      {/* MODAL ALUNO */}
       {alunoDetalhe && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-lg p-6 relative">
             <button onClick={() => setAlunoDetalhe(null)} className="absolute top-4 right-4 text-gray-400 font-bold text-xl">X</button>
             <h2 className="text-2xl font-bold text-gray-800 mb-2">{alunoDetalhe.nome}</h2>
-            <p className="text-gray-600 mb-4">Responsável: {alunoDetalhe.profiles?.nome_completo} ({alunoDetalhe.profiles?.telefone})</p>
+            <p className="text-gray-600 mb-4">Responsável: {alunoDetalhe.profiles?.nome_completo}</p>
             <button onClick={() => deletarAluno(alunoDetalhe.id)} className="w-full bg-red-100 text-red-700 py-2 rounded font-bold">🗑️ Excluir Aluno</button>
           </div>
         </div>
       )}
 
-      {/* MODAL LISTA DE INSCRITOS NO EVENTO */}
+      {/* MODAL INSCRITOS */}
       {eventoDetalhe && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-lg p-6 relative max-h-[80vh] overflow-y-auto">
             <button onClick={() => setEventoDetalhe(null)} className="absolute top-4 right-4 text-gray-400 font-bold text-xl">X</button>
             <h2 className="text-xl font-bold text-gray-800 mb-4">Inscritos: {eventoDetalhe.titulo}</h2>
-            
             <div className="space-y-2">
               {inscricoes.filter(i => i.evento_id === eventoDetalhe.id).map(insc => (
                 <div key={insc.id} className="flex justify-between items-center border-b pb-2">
-                  <div>
-                    <p className="font-bold text-gray-700">{insc.alunos?.nome}</p>
-                    <p className="text-xs text-gray-500">Nasc: {insc.alunos?.data_nascimento}</p>
-                  </div>
-                  <button 
-                    onClick={() => removerInscrito(insc.id)}
-                    className="text-red-600 text-xs border border-red-200 px-2 py-1 rounded hover:bg-red-50"
-                  >
-                    Remover
-                  </button>
+                  <p className="font-bold text-gray-700">{insc.alunos?.nome}</p>
+                  <button className="text-red-600 text-xs border border-red-200 px-2 py-1 rounded">Remover</button>
                 </div>
               ))}
-              {inscricoes.filter(i => i.evento_id === eventoDetalhe.id).length === 0 && (
-                <p className="text-gray-400 text-center">Nenhum inscrito ainda.</p>
-              )}
+              {inscricoes.filter(i => i.evento_id === eventoDetalhe.id).length === 0 && <p className="text-gray-400">Nenhum inscrito.</p>}
             </div>
           </div>
         </div>
       )}
-
     </div>
   )
 }
