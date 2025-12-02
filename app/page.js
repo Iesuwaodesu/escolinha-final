@@ -82,7 +82,7 @@ export default function LoginPage() {
               <button onClick={handleLogin} disabled={loading} className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-lg shadow-md transition">{loading ? 'Aguarde...' : 'ACESSAR PAINEL'}</button>
             </div>
           )}
-
+{/* 
           {modo === 'cadastro_admin' && (
             <form onSubmit={handleCadastroAdmin} className="space-y-4">
               <input required placeholder="Nome Completo" className="w-full border p-2 rounded text-black" value={formAdmin.nome} onChange={e => setFormAdmin({...formAdmin, nome: e.target.value})} />
@@ -90,7 +90,7 @@ export default function LoginPage() {
               <div className="flex gap-2"><input required type="password" placeholder="Senha" className="w-1/2 border p-2 rounded text-black" value={formAdmin.senha} onChange={e => setFormAdmin({...formAdmin, senha: e.target.value})} /><input required type="password" placeholder="Confirmar" className="w-1/2 border p-2 rounded text-black" value={formAdmin.confirma} onChange={e => setFormAdmin({...formAdmin, confirma: e.target.value})} /></div>
               <button disabled={loading} className="w-full bg-black text-white font-bold py-3 rounded hover:bg-gray-800">{loading ? '...' : 'CRIAR ADMIN'}</button>
             </form>
-          )}
+          )} */}
 
           {modo === 'cadastro_aluno' && (
             <form onSubmit={handleCadastroAluno} className="space-y-4">
